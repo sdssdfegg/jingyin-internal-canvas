@@ -541,6 +541,38 @@ textarea:focus {
   transform: scale(1.018);
 }
 
+/* P1 缺图自愈：结果图失效时的占位卡片。
+   用深色中性底（和正常卡片同一套配色），显示可读原因，不再是无法解释的空白。 */
+.assetImageFallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  padding: 14px;
+  text-align: center;
+  color: var(--text-soft);
+  background: var(--panel);
+}
+
+.assetImageFallback strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.assetImageFallback span {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.assetImageFallback em {
+  font-size: 10px;
+  font-style: normal;
+  opacity: 0.75;
+}
+
 .selectBox {
   position: absolute;
   z-index: 3;

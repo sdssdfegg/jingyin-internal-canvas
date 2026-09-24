@@ -50,6 +50,10 @@ const summary = {
   missingArchives: 0,
   missingReferences: 0,
   remoteOnlyImages: 0,
+  // P1 之后：失效引用有两种状态 —— 已被服务端标记（自愈生效，属已知状态）
+  // 与尚未标记（说明自愈没生效，才是真问题）。
+  markedStale: 0,
+  unmarkedStale: 0,
   staleRemoteHosts: []
 };
 
@@ -81,6 +85,14 @@ if (!Array.isArray(history)) {
 
 summary.historyEntries = history.length;
 
+/** P1 之后：失效引用是否已被服务端标记（标记过就是自愈生效，不再算"新问题"）。 */
+function recordStale(entry) {
+  const marked = entry.marked === true;
+  if (marked) summary.markedStale += 1;
+  else summary.unmarkedStale += 1;
+  issues.push(entry);
+}
+
 for (const item of history) {
   const image = item.image || {};
 
@@ -91,11 +103,12 @@ for (const item of history) {
     const target = path.join(DIRS.history, path.basename(archiveFile));
     if (!existsSync(target)) {
       summary.missingArchives += 1;
-      issues.push({
+      recordStale({
         type: "missing_archive",
         id: item.id,
         model: item.modelLabel || "",
         file: archiveFile,
+        marked: image.missing === true,
         // 关键：归档丢了以后前端会去请求 sourceUrl，若那是退役域名就会 502
         fallbackRemote: String(image.sourceUrl || image.value || "").slice(0, 120),
         fix: "删除该历史条目，或把归档文件恢复回 data/history-images/"
@@ -107,10 +120,11 @@ for (const item of history) {
       summary.checkedLocalFiles += 1;
       if (!existsSync(target)) {
         summary.missingArchives += 1;
-        issues.push({
+        recordStale({
           type: "missing_local_file",
           id: item.id,
           file: path.basename(target),
+          marked: image.missing === true,
           fix: "删除该历史条目，或恢复对应文件"
         });
       }
@@ -133,11 +147,12 @@ for (const item of history) {
     summary.checkedReferences += 1;
     if (!existsSync(path.join(DIRS.reference, path.basename(name)))) {
       summary.missingReferences += 1;
-      issues.push({
+      recordStale({
         type: "missing_reference_asset",
         id: item.id,
         referenceId: reference.id || "",
         file: name,
+        marked: reference.missing === true,
         fix: "参考图缩略图已丢失；不影响已有成片，可选择忽略或删除该条目"
       });
     }
@@ -157,14 +172,20 @@ for (const item of history) {
 }
 summary.staleRemoteHosts = [...hostCounts.entries()].map(([host, count]) => ({ host, count }));
 
-const ok = issues.length === 0;
+// P1 之后判定标准变了：
+//   失效引用**已被服务端标记**（image/reference.missing=true）→ 自愈已生效，属已知状态，不算失败；
+//   失效引用**尚未标记** → 说明标注逻辑没跑到，才是需要处理的问题。
+const ok = summary.unmarkedStale === 0 && summary.remoteOnlyImages === 0;
 console.log(JSON.stringify({
   ok,
   note: ok
-    ? "历史引用完整：没有指向不存在文件的记录"
-    : "发现失效引用：打开页面时会出现 404/502 与空白卡片，建议按 fix 字段清理",
+    ? (summary.markedStale > 0
+      ? `没有未处理的失效引用；另有 ${summary.markedStale} 处已被标记（界面会显示"原图已失效"并可清理）`
+      : "历史引用完整：没有指向不存在文件的记录")
+    : "发现未标记的失效引用：标注逻辑可能没生效，请检查 GET /api/history 的标记与前端展示",
   summary,
   issueCount: issues.length,
+  unmarkedCount: summary.unmarkedStale,
   issues: issues.slice(0, 50)
 }, null, 2));
 

@@ -20,6 +20,7 @@ import {
   FolderOpen,
   History,
   Image as ImageIcon,
+  ImageOff,
   KeyRound,
   Layers,
   Library,
@@ -76,6 +77,7 @@ import {
   snapSizeToRatio
 } from "./shared/local-edit-geometry.js";
 import DebouncedTextarea from "./shared/DebouncedTextarea.jsx";
+import { brokenImageReason, resultImageCardState } from "./shared/result-image.js";
 import { classifyGenerationError, describeEmptyResult, formatGenerationError } from "./shared/generation-errors.js";
 import { fileSize, formatMs } from "./lib/format/index.js";
 import { readJsonStorage, removeStorageItem, writeJsonStorage } from "./lib/storage/json-storage.js";
@@ -1327,12 +1329,22 @@ function CachedImage({ src, alt = "", className = "", style, draggable = false, 
 }
 
 function ReferenceThumbTray({ references, count = 0, className = "", max = 5, onOpen, onContextMenu, onImageDragStart }) {
-  const items = Array.isArray(references) ? references.filter(Boolean) : [];
+  const allItems = Array.isArray(references) ? references.filter(Boolean) : [];
+  // P1 缺图自愈：归档已丢失的参考图缩略图（服务端标记 missing）不再渲染、不再请求，
+  // 否则每次打开页面都会 404。用数量提示告诉用户当时用了几张参考图。
+  const items = allItems.filter((reference) => !reference?.missing);
+  const missingCount = allItems.length - items.length;
   const visibleItems = items.slice(0, max);
-  if (visibleItems.length === 0 && count > 0) {
+  if (visibleItems.length === 0 && (count > 0 || missingCount > 0)) {
+    const total = count || allItems.length;
     return (
-      <div className={`referenceThumbTray ${className}`} title="旧记录只保存了参考图数量，没有保存缩略图">
-        <span className="referenceCountPill">{count} 张参考</span>
+      <div
+        className={`referenceThumbTray ${className}`}
+        title={missingCount > 0
+          ? `${missingCount} 张参考图缩略图已丢失（归档文件不存在），不再重复请求`
+          : "旧记录只保存了参考图数量，没有保存缩略图"}
+      >
+        <span className="referenceCountPill">{total} 张参考</span>
       </div>
     );
   }
@@ -2861,6 +2873,9 @@ function App() {
   const [isPickingDirectory, setIsPickingDirectory] = useState(false);
   const [files, setFiles] = useState([]);
   const [results, setResults] = useState([]);
+  // P1 缺图自愈：记录"图片确实加载失败"的结果 id → 原因文案。
+  // 只存在内存里，不回写持久化数据（服务端另有"归档文件丢失"的持久标记）。
+  const [brokenResultImages, setBrokenResultImages] = useState(() => ({}));
   const [resultFilter, setResultFilter] = useState("all");
   const [quickMode, setQuickMode] = useState("image");
   const [videoSettings, setVideoSettings] = useState(videoDefaults);
@@ -4608,8 +4623,29 @@ function App() {
       next.delete(id);
       return next;
     });
+    setBrokenResultImages((current) => {
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
     if (detailInfoSelection?.resultId === id) setDetailInfoSelection(null);
     addEvent("删除", "已删除当前图片");
+  }
+
+  /**
+   * P1 缺图自愈：图片真的加载失败时记下来，卡片改为显示可读原因，
+   * 并且不再对同一个地址重复请求（避免每次打开页面都刷 404/502）。
+   * 记录里带上失败时的地址，重刷换图后自动失效。
+   */
+  function markResultImageBroken(item) {
+    const src = imageSourceFromResult(item?.image);
+    if (!item?.id || !src) return;
+    setBrokenResultImages((current) => (
+      current[item.id]?.src === src
+        ? current
+        : { ...current, [item.id]: { src, reason: brokenImageReason() } }
+    ));
   }
 
   function quickResultDragId(event) {
@@ -7937,6 +7973,13 @@ function App() {
               }
               const item = galleryItem.result;
               const src = imageSourceFromResult(item.image);
+              // P1 缺图自愈：已知失效（服务端标记）或加载失败过 → 不再发请求，直接显示原因。
+              // 失败标记带 src 快照：重刷后地址变了就自动失效，不会把新图也判成坏图。
+              const cardState = resultImageCardState(item.image, imageSourceFromResult);
+              const brokenEntry = brokenResultImages[item.id];
+              const brokenReason = cardState.missing
+                ? cardState.reason
+                : (brokenEntry && brokenEntry.src === src ? brokenEntry.reason : "");
               const selected = selectedIds.has(item.id);
               return (
                 <article
@@ -7996,14 +8039,24 @@ function App() {
                     <Trash2 size={15} />
                   </button>
                   {item.generationMs && <div className="assetTimeBadge">用时 {formatMs(item.generationMs)}</div>}
-                  <CachedImage
-                    src={src}
-                    alt={`生成图片 ${index + 1}`}
-                    draggable
-                    onDragStart={(event) => beginResultImageDrag(event, item, index)}
-                    onDragEnd={clearQuickResultDragState}
-                    diagnostic={{ requestId: item.requestId || item.id, endpoint: "/api/images", module: "快捷生成", placement: "quick-card" }}
-                  />
+                  {brokenReason ? (
+                    <div className="assetImageFallback" title={brokenReason}>
+                      <ImageOff size={26} />
+                      <strong>原图已失效</strong>
+                      <span>{brokenReason}</span>
+                      <em>可点右上角删除按钮清理这条记录</em>
+                    </div>
+                  ) : (
+                    <CachedImage
+                      src={src}
+                      alt={`生成图片 ${index + 1}`}
+                      draggable
+                      onDragStart={(event) => beginResultImageDrag(event, item, index)}
+                      onDragEnd={clearQuickResultDragState}
+                      onError={() => markResultImageBroken(item)}
+                      diagnostic={{ requestId: item.requestId || item.id, endpoint: "/api/images", module: "快捷生成", placement: "quick-card" }}
+                    />
+                  )}
                   <ReferenceThumbTray references={item.references} count={item.referenceCount} className="assetReferenceTray" onOpen={openReferencePreview} onContextMenu={openReferenceContextMenu} onImageDragStart={beginReferenceImageDrag} />
                   {item.prompt && (
                     <button

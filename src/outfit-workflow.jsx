@@ -14,6 +14,7 @@ import {
   Loader2,
   Lock,
   Maximize2,
+  ImageOff,
   Minus,
   Move,
   Palette,
@@ -74,6 +75,7 @@ import {
 import { getAppConfig } from "./api/config.js";
 import { formatConnectionResult, testConnection } from "./api/connection.js";
 import { describeEmptyResult, formatGenerationError, sanitizeErrorText } from "./shared/generation-errors.js";
+import { brokenImageReason, resultImageCardState } from "./shared/result-image.js";
 import {
   getSaveDirectory,
   openSaveDirectoryRequest,
@@ -2864,6 +2866,11 @@ function sanitizeTaskHistoryItem(task) {
     rerunOf: task.rerunOf || "",
     rerunCandidate: Boolean(task.rerunCandidate),
     result: stripRuntimeResultImageCache(task.result) || null,
+    // P1 缺图自愈：把"结果图已失效"持久化下来，下次打开就不再重复请求那个坏地址。
+    // 只记地址指纹 + 原因，不删任何东西；结果图恢复后地址变了会自动失效。
+    resultMissing: task.resultMissing && typeof task.resultMissing === "object"
+      ? { src: String(task.resultMissing.src || ""), reason: String(task.resultMissing.reason || "") }
+      : null,
     savedFilename: task.savedFilename || "",
     savedPath: task.savedPath || "",
     autoSaveFailed: Boolean(task.autoSaveFailed),
@@ -6889,6 +6896,9 @@ export default function OutfitWorkflow({
   const [isDirectoryModalOpen, setIsDirectoryModalOpen] = useState(false);
   const [isPickingDirectory, setIsPickingDirectory] = useState(false);
   const [downloadFeedbackIds, setDownloadFeedbackIds] = useState(() => new Set());
+  // P1 缺图自愈：记录"结果图确实加载失败"的任务 id → { src, reason }。
+  // 只存在内存里；服务端另有"归档文件丢失"的持久标记（走 /api/history）。
+  const [brokenTaskImages, setBrokenTaskImages] = useState(() => ({}));
   const [resultReplaceTargetId, setResultReplaceTargetId] = useState("");
   const [activeUploadGroup, setActiveUploadGroup] = useState(() => initialOutfitPage.activeUploadGroup || "model");
   const [originalLibrary, setOriginalLibrary] = useState(() => initialOutfitPage.originalLibrary || []);
@@ -8576,8 +8586,31 @@ export default function OutfitWorkflow({
       next.delete(taskId);
       return next;
     });
+    setBrokenTaskImages((current) => {
+      if (!current[taskId]) return current;
+      const next = { ...current };
+      delete next[taskId];
+      return next;
+    });
     if (preview?.id === taskId) setPreview(null);
     addEvent("删除", `已删除 #${target.order || ""} 结果图`);
+  }
+
+  /**
+   * P1 缺图自愈：结果图真的加载失败时记下来，卡片改为显示可读原因，
+   * 并且不再对同一个地址重复请求（避免每次打开页面都刷 404/502）。
+   * 记录带失败时的地址，重刷换图后自动失效；同时写进任务记录，重载后依然生效。
+   */
+  function markTaskImageBroken(task) {
+    const src = displayResultImageSource(task?.result);
+    if (!task?.id || !src) return;
+    const mark = { src, reason: brokenImageReason() };
+    setBrokenTaskImages((current) => (
+      current[task.id]?.src === src ? current : { ...current, [task.id]: mark }
+    ));
+    setTasks((current) => current.map((item) => (
+      item.id === task.id && item.resultMissing?.src !== src ? { ...item, resultMissing: mark } : item
+    )));
   }
 
   function clearAll() {
@@ -9938,6 +9971,13 @@ function buildTasks(countOverride = plannedGenerationCount) {
 
             const promptText = task.prompt || settings.prompt;
             const src = displayResultImageSource(task.result);
+            // P1 缺图自愈：已知失效或加载失败过 → 不再重复请求，直接显示可读原因。
+            const cardState = resultImageCardState(task.result, displayResultImageSource);
+            // 会话内的失败标记优先，其次用持久化在任务记录里的标记（重载后依然生效）。
+            const brokenEntry = brokenTaskImages[task.id] || task.resultMissing;
+            const brokenReason = cardState.missing
+              ? cardState.reason
+              : (brokenEntry && brokenEntry.src === src ? brokenEntry.reason : "");
             const hasCropReturn = taskHasCropReturnResult(task);
             return (
               <article
@@ -10007,19 +10047,29 @@ function buildTasks(countOverride = plannedGenerationCount) {
                     {qualityStatusLabel(task.qualityCheck)}
                   </div>
                 )}
-                <PreparedResultImage
-                  src={src}
-                  alt={`AI换装结果 ${task.order || ""}`}
-                  decoding="async"
-                  loading={taskIndex < 6 ? "eager" : "lazy"}
-                  fetchPriority={taskIndex < 4 ? "high" : "low"}
-                  draggable
-                  onDragStart={(event) => beginTaskImageDrag(event, task, taskIndex)}
-                  onDragOver={(event) => handleResultReplaceDragOver(event, task)}
-                  onDrop={(event) => handleResultReplaceDrop(event, task)}
-                  onDragEnd={clearResultDragState}
-                  diagnostic={{ requestId: task.id, endpoint: "/api/generate-outfit", module: "批量生成", workflowMode: task.workflowMode || activeOutfitPage.workflowMode || "", placement: "outfit-card" }}
-                />
+                {brokenReason ? (
+                  <div className="assetImageFallback" title={brokenReason}>
+                    <ImageOff size={26} />
+                    <strong>原图已失效</strong>
+                    <span>{brokenReason}</span>
+                    <em>可点右上角删除按钮清理这条记录</em>
+                  </div>
+                ) : (
+                  <PreparedResultImage
+                    src={src}
+                    alt={`AI换装结果 ${task.order || ""}`}
+                    decoding="async"
+                    loading={taskIndex < 6 ? "eager" : "lazy"}
+                    fetchPriority={taskIndex < 4 ? "high" : "low"}
+                    draggable
+                    onDragStart={(event) => beginTaskImageDrag(event, task, taskIndex)}
+                    onDragOver={(event) => handleResultReplaceDragOver(event, task)}
+                    onDrop={(event) => handleResultReplaceDrop(event, task)}
+                    onDragEnd={clearResultDragState}
+                    onError={() => markTaskImageBroken(task)}
+                    diagnostic={{ requestId: task.id, endpoint: "/api/generate-outfit", module: "批量生成", workflowMode: task.workflowMode || activeOutfitPage.workflowMode || "", placement: "outfit-card" }}
+                  />
+                )}
                 <ReferenceThumbTray
                   references={references}
                   count={referenceCount}

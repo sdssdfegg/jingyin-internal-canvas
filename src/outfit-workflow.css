@@ -1081,6 +1081,37 @@
   transform: scale(1.018);
 }
 
+/* P1 缺图自愈：结果图失效时的占位卡片（与快捷生成同一套表现，深色中性底 + 可读原因）。 */
+.outfitWorkflowEmbedded .assetImageFallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  padding: 14px;
+  text-align: center;
+  color: var(--text-soft);
+  background: var(--panel-bg);
+}
+
+.outfitWorkflowEmbedded .assetImageFallback strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.outfitWorkflowEmbedded .assetImageFallback span {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.outfitWorkflowEmbedded .assetImageFallback em {
+  font-size: 10px;
+  font-style: normal;
+  opacity: 0.75;
+}
+
 .outfitWorkflowEmbedded .selectBox {
   position: absolute;
   top: 8px;

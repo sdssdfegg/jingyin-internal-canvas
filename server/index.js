@@ -926,7 +926,12 @@ function normalizeReferenceAsset(item, index = 0) {
     size: Number(item.size || 0),
     mimeType: String(item.mimeType || ""),
     ...(archiveFile ? { archiveFile } : {}),
-    ...(localUrl ? { localUrl } : {})
+    ...(localUrl ? { localUrl } : {}),
+    // P1 缺图自愈：失效标记必须一起持久化。
+    // 这里原来是字段白名单，不带上 missing 的话标记只存在于接口响应里，
+    // 一写盘就被丢掉，前端下次读到的仍是"未标记"（这个 bug 被 history-integrity-check 抓出来）。
+    ...(item.missing === true ? { missing: true } : {}),
+    ...(item.missingReason ? { missingReason: String(item.missingReason) } : {})
   };
 }
 
@@ -946,6 +951,133 @@ function normalizeHistoryItem(item) {
     image,
     ...(references.length > 0 ? { references, referenceCount: references.length } : {})
   };
+}
+
+/**
+ * 判断一条历史记录指向的本地文件是否还在。
+ *
+ * 「不在」分两种，都会让结果卡片变成无法解释的空白（P1 缺图）：
+ *   1. 有 archiveFile 但 data/history-images 下找不到 → archive_missing
+ *   2. 只有 /api/history-image/... 或 /api/result/... 的 localUrl，同样找不到 → archive_missing
+ * 只有确实是本地引用且文件不存在才算失效；纯远程地址不在这里判定（它可能仍然有效）。
+ */
+function historyItemIntegrity(item) {
+  const image = item?.image || {};
+  const archiveFile = String(image.archiveFile || "").trim();
+  if (archiveFile) {
+    const target = historyImagePath(archiveFile);
+    return existsSync(target)
+      ? { missing: false, reason: "" }
+      : { missing: true, reason: "archive_missing" };
+  }
+  const localUrl = String(image.localUrl || "").trim();
+  const localMatch = /^\/api\/(history-image|result)\/(.+)$/.exec(localUrl);
+  if (localMatch) {
+    const dir = localMatch[1] === "result" ? resultDir : historyImageDir;
+    const name = decodeURIComponent(localMatch[2]);
+    return existsSync(path.join(dir, path.basename(name)))
+      ? { missing: false, reason: "" }
+      : { missing: true, reason: "archive_missing" };
+  }
+  return { missing: false, reason: "" };
+}
+
+/** 参考图缩略图的完整性（归档文件是否还在）。 */
+function referenceAssetIntegrity(reference) {
+  const archiveFile = String(reference?.archiveFile || "").trim();
+  if (!archiveFile) return { missing: false, reason: "" };
+  const target = path.join(referenceAssetDir, path.basename(archiveFile));
+  return existsSync(target)
+    ? { missing: false, reason: "" }
+    : { missing: true, reason: "reference_missing" };
+}
+
+/** 给单条记录里的参考图补/清 missing 标记；返回是否发生变化。 */
+function annotateReferences(references) {
+  const list = Array.isArray(references) ? references : [];
+  let changed = false;
+  const next = list.map((reference) => {
+    if (!reference || typeof reference !== "object") return reference;
+    const integrity = referenceAssetIntegrity(reference);
+    if (integrity.missing) {
+      if (reference.missing && reference.missingReason === integrity.reason) return reference;
+      changed = true;
+      return { ...reference, missing: true, missingReason: integrity.reason };
+    }
+    if (reference.missing || reference.missingReason) {
+      changed = true;
+      const { missing: _m, missingReason: _r, ...rest } = reference;
+      return rest;
+    }
+    return reference;
+  });
+  return { references: next, changed };
+}
+
+/**
+ * 给历史记录补上完整性标记（**只加字段，绝不删除条目**）。
+ * 幂等：已经标记过且结论一致的条目不会产生 diff，因此不会反复写盘。
+ *
+ * 同时处理两类失效引用：
+ *   1. 结果图归档文件丢失（image.missing / archive_missing）
+ *   2. 参考图缩略图归档丢失（references[].missing / reference_missing）
+ */
+function annotateHistoryIntegrity(items) {
+  const list = Array.isArray(items) ? items : [];
+  const missingIds = [];
+  let changed = false;
+  const next = list.map((item) => {
+    if (!item || typeof item !== "object") return item;
+    const integrity = historyItemIntegrity(item);
+    const image = item.image && typeof item.image === "object" ? item.image : null;
+    const references = annotateReferences(item.references);
+    let nextItem = item;
+
+    if (references.changed) {
+      changed = true;
+      nextItem = { ...nextItem, references: references.references };
+    }
+
+    if (!image) return nextItem;
+
+    const wasMissing = Boolean(image.missing);
+    const wasReason = String(image.missingReason || "");
+    if (integrity.missing) {
+      // 统计必须在幂等判断之前：否则第二次读取时 missingIds 会是空的，
+      // 摘要归零、repair 也会找不到失效条目（这个 bug 是被 history-repair-check 抓出来的）。
+      missingIds.push(item.id);
+      if (wasMissing && wasReason === integrity.reason) return nextItem; // 已标记且结论一致 → 不写盘
+      changed = true;
+      return {
+        ...nextItem,
+        image: { ...image, missing: true, missingReason: integrity.reason, missingCheckedAt: Date.now() }
+      };
+    }
+    // 文件回来了（用户手动恢复归档）→ 把旧标记清掉，让卡片恢复正常
+    if (wasMissing || wasReason) {
+      changed = true;
+      const { missing: _m, missingReason: _r, missingCheckedAt: _c, ...restImage } = image;
+      return { ...nextItem, image: restImage };
+    }
+    return nextItem;
+  });
+  return { items: next, changed, missingIds };
+}
+
+/**
+ * 首次修复前留一份专用备份，保证"改用户数据"这件事是可回退的。
+ * 只在备份不存在时创建一次，不覆盖。
+ */
+async function ensureHistoryRepairBackup() {
+  const backupPath = path.join(dataDir, "history.pre-repair-backup.json");
+  try {
+    if (existsSync(backupPath)) return path.basename(backupPath);
+    if (!existsSync(historyFile)) return "";
+    await copyFile(historyFile, backupPath);
+    return path.basename(backupPath);
+  } catch {
+    return "";
+  }
 }
 
 async function recoverHistoryFromImageFiles() {
@@ -3923,10 +4055,55 @@ app.post("/api/reference-prompt-rewrite", upload.fields([
 });
 
 app.get("/api/history", async (_req, res) => {
-  const results = await readHistoryResults();
+  const stored = await readHistoryResults();
+  // P1 缺图自愈：读历史时顺带核对"归档文件是否还在"，把失效条目标记出来并落盘一次。
+  // 只加标记、不删条目；标记过的条目不会重复写盘。
+  const annotated = annotateHistoryIntegrity(stored);
+  if (annotated.changed) {
+    await ensureHistoryRepairBackup();
+    await writeHistoryResults(annotated.items);
+  }
   res.json({
     ok: true,
-    results: results.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    results: annotated.items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+    integrity: {
+      checked: annotated.items.length,
+      missing: annotated.missingIds.length,
+      missingIds: annotated.missingIds
+    }
+  });
+});
+
+/**
+ * POST /api/history/repair —— 显式修复失效历史引用。
+ *
+ * 默认只做"标记"，**不会删除任何记录**（`dropMissing` 必须由用户显式传入 true 才清理）。
+ * 第一次修复前会留一份 data/history.pre-repair-backup.json，保证可回退。
+ */
+app.post("/api/history/repair", async (req, res) => {
+  const dropMissing = req.body?.dropMissing === true;
+  const stored = await readHistoryResults();
+  const annotated = annotateHistoryIntegrity(stored);
+  const backupFile = annotated.changed || dropMissing ? await ensureHistoryRepairBackup() : "";
+  let kept = annotated.items;
+  let dropped = 0;
+  if (dropMissing && annotated.missingIds.length > 0) {
+    const missingSet = new Set(annotated.missingIds);
+    kept = annotated.items.filter((item) => !missingSet.has(item.id));
+    dropped = annotated.items.length - kept.length;
+  }
+  if (annotated.changed || dropped > 0) {
+    await writeHistoryResults(kept, { replaceBackup: kept.length === 0 });
+  }
+  res.json({
+    ok: true,
+    checked: annotated.items.length,
+    missing: annotated.missingIds.length,
+    missingIds: annotated.missingIds,
+    marked: annotated.changed ? annotated.missingIds.length : 0,
+    dropped,
+    remaining: kept.length,
+    backupFile
   });
 });
 
