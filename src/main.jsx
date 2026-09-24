@@ -77,6 +77,7 @@ import {
   snapSizeToRatio
 } from "./shared/local-edit-geometry.js";
 import DebouncedTextarea from "./shared/DebouncedTextarea.jsx";
+import { ErrorBoundary } from "./shared/error-boundary.jsx";
 import { brokenImageReason, isAllowedReferenceImage, resultImageCardState } from "./shared/result-image.js";
 import { classifyGenerationError, describeEmptyResult, formatGenerationError } from "./shared/generation-errors.js";
 import { fileSize, formatMs } from "./lib/format/index.js";
@@ -6538,7 +6539,9 @@ function App() {
   }
 
   return (
-    <main className="appShell">
+    // 最外层兜底：任何一个视图在渲染期抛错，都不会变成整页白屏。
+    <ErrorBoundary label="应用主界面">
+      <main className="appShell">
       <aside className="sidebar">
         <div className="brand">
           <div className="avatar">
@@ -6749,23 +6752,27 @@ function App() {
         )}
 
         {["outfit", "resize"].includes(activeView) ? (
-          <OutfitWorkflow
-            view={activeView}
-            hostTheme={settings.theme}
-            hostApiKey={settings.apiKey}
-            onOpenHostSettings={openSettingsPanel}
-          />
+          <ErrorBoundary label="批量生成">
+            <OutfitWorkflow
+              view={activeView}
+              hostTheme={settings.theme}
+              hostApiKey={settings.apiKey}
+              onOpenHostSettings={openSettingsPanel}
+            />
+          </ErrorBoundary>
         ) : activeView === "image-editor" ? (
-          <ImageEditorPanel
-            incomingImage={imageEditorSeed}
-            onIncomingHandled={(id) => setImageEditorSeed((current) => current?.id === id ? null : current)}
-            resolveDroppedFiles={imageFilesFromReferenceDrop}
-            saveDirectory={saveDirectory}
-            onChooseDirectory={openDirectoryModal}
-            onOpenSaveDirectory={() => void openSaveDirectory()}
-            onSaveMergedImage={saveProcessedImageFile}
-            onAddEvent={addEvent}
-          />
+          <ErrorBoundary label="图片编辑">
+            <ImageEditorPanel
+              incomingImage={imageEditorSeed}
+              onIncomingHandled={(id) => setImageEditorSeed((current) => current?.id === id ? null : current)}
+              resolveDroppedFiles={imageFilesFromReferenceDrop}
+              saveDirectory={saveDirectory}
+              onChooseDirectory={openDirectoryModal}
+              onOpenSaveDirectory={() => void openSaveDirectory()}
+              onSaveMergedImage={saveProcessedImageFile}
+              onAddEvent={addEvent}
+            />
+          </ErrorBoundary>
         ) : activeView === "detail-main" ? (
           <section className="detailWorkbench">
             <aside className="detailInputPanel">
@@ -8859,7 +8866,8 @@ function App() {
           </button>
         </div>
       )}
-    </main>
+      </main>
+    </ErrorBoundary>
   );
 }
 

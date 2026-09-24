@@ -3027,6 +3027,43 @@ textarea:focus {
   font-size: 12px;
 }
 
+/* 渲染错误兜底面板：出错区域显示可读原因 + 恢复入口，避免整页白屏。 */
+.errorBoundaryPanel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.errorBoundaryPanel strong {
+  font-size: 15px;
+}
+
+.errorBoundaryPanel p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.errorBoundaryHint {
+  opacity: 0.85;
+}
+
+.errorBoundaryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* 连接测试结果：进行中中性色、成功绿色、失败红色。 */
 .connectionHint {
   display: block;
