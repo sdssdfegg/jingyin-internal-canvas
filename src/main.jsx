@@ -77,7 +77,7 @@ import {
   snapSizeToRatio
 } from "./shared/local-edit-geometry.js";
 import DebouncedTextarea from "./shared/DebouncedTextarea.jsx";
-import { brokenImageReason, resultImageCardState } from "./shared/result-image.js";
+import { brokenImageReason, isAllowedReferenceImage, resultImageCardState } from "./shared/result-image.js";
 import { classifyGenerationError, describeEmptyResult, formatGenerationError } from "./shared/generation-errors.js";
 import { fileSize, formatMs } from "./lib/format/index.js";
 import { readJsonStorage, removeStorageItem, writeJsonStorage } from "./lib/storage/json-storage.js";
@@ -1330,9 +1330,12 @@ function CachedImage({ src, alt = "", className = "", style, draggable = false, 
 
 function ReferenceThumbTray({ references, count = 0, className = "", max = 5, onOpen, onContextMenu, onImageDragStart }) {
   const allItems = Array.isArray(references) ? references.filter(Boolean) : [];
-  // P1 缺图自愈：归档已丢失的参考图缩略图（服务端标记 missing）不再渲染、不再请求，
-  // 否则每次打开页面都会 404。用数量提示告诉用户当时用了几张参考图。
-  const items = allItems.filter((reference) => !reference?.missing);
+  // P1：统一图片地址校验 + 归档缺失标记。
+  // 归档已丢失（服务端标记 missing），或地址不在白名单（旧中转站/预签名链接等），
+  // 都不再渲染、不再请求，避免每次打开页面 404/502。用数量提示告诉用户当时用了几张参考图。
+  const items = allItems.filter((reference) => (
+    !reference?.missing && isAllowedReferenceImage(reference, referenceSource)
+  ));
   const missingCount = allItems.length - items.length;
   const visibleItems = items.slice(0, max);
   if (visibleItems.length === 0 && (count > 0 || missingCount > 0)) {
@@ -1341,7 +1344,7 @@ function ReferenceThumbTray({ references, count = 0, className = "", max = 5, on
       <div
         className={`referenceThumbTray ${className}`}
         title={missingCount > 0
-          ? `${missingCount} 张参考图缩略图已丢失（归档文件不存在），不再重复请求`
+          ? `${missingCount} 张参考图缩略图不可用（归档文件不存在或地址不在允许来源），不再重复请求`
           : "旧记录只保存了参考图数量，没有保存缩略图"}
       >
         <span className="referenceCountPill">{total} 张参考</span>

@@ -2211,10 +2211,33 @@ function isSmartOutfitInterventionEnabled(value) {
   return !["0", "false", "off", "no", "regular", "normal", "常规", "关闭"].includes(text);
 }
 
+/**
+ * 图片代理允许的主机白名单（与前端 src/shared/image-hosts.js 同一条规则）。
+ *
+ * 前端已经会拦掉非白名单地址（不发请求）；服务端再加一道，保证即使有遗漏的调用点，
+ * 也**不会真的把请求发到已退役的旧中转站/预签名临时链接上**（P1 实测那 3 个 502 就是这条路径）。
+ * 主机来源是渠道配置本身，不额外硬编码，避免两处漂移。
+ */
+const ALLOWED_IMAGE_PROXY_HOSTS = new Set((() => {
+  const hosts = new Set();
+  try {
+    const base = new URL(PRIMARY_CHANNEL_API_BASE_URL);
+    if (base.hostname) hosts.add(base.hostname.toLowerCase());
+  } catch { /* 配置异常时不放行任何远程主机 */ }
+  return hosts;
+})());
+
+function isAllowedImageProxyHost(host) {
+  return ALLOWED_IMAGE_PROXY_HOSTS.has(String(host || "").toLowerCase());
+}
+
 function parseProxyTarget(rawUrl) {
   const target = new URL(String(rawUrl || ""));
   if (!["http:", "https:"].includes(target.protocol)) {
     throw new Error("unsupported_protocol");
+  }
+  if (!isAllowedImageProxyHost(target.hostname)) {
+    throw new Error("blocked_image_host");
   }
   return target;
 }
@@ -5205,11 +5228,24 @@ app.post("/api/outfit-quality-check", upload.fields([
 });
 
 app.get("/api/image-proxy", async (req, res) => {
+  let target;
   try {
-    parseProxyTarget(req.query.url);
-  } catch {
+    target = parseProxyTarget(req.query.url);
+  } catch (error) {
+    // 非白名单主机：直接回 403，**不发起任何上游请求**（避免无意义的 502 与等待）
+    if (error instanceof Error && error.message === "blocked_image_host") {
+      await writeAssetLog({
+        time: new Date().toISOString(),
+        ok: false,
+        stage: "image-proxy-blocked-host",
+        url: String(req.query.url || "").slice(0, 300),
+        error: "blocked_image_host"
+      }).catch(() => {});
+      return res.status(403).json({ ok: false, message: "blocked_image_host" });
+    }
     return res.status(400).json({ ok: false, message: "图片地址无效" });
   }
+  void target;
 
   try {
     await streamExternalImageProxy(req, res, req.query.url, IMAGE_PROXY_TIMEOUT_MS);

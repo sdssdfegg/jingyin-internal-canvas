@@ -11,12 +11,19 @@
 //
 // 注意：本模块只做判读与文案，不发起任何网络请求，也不修改持久化数据。
 
+import { IMAGE_SOURCE_REASONS, classifyImageSource } from "./image-hosts.js";
+
 /** 缺图/失效的原因码 → 用户可读文案。 */
 export const RESULT_IMAGE_MISSING_REASONS = Object.freeze({
   archive_missing: "本地归档文件已丢失：这条记录保存时原图没有落到本机（或归档文件被移动/清理过）。",
   remote_expired: "远程原图链接已失效：结果图只在渠道服务器上存过临时链接，链接过期后无法再取回。",
   load_failed: "图片加载失败：归档文件可能已被移动或删除，远程链接也可能已经过期。",
-  reference_missing: "参考图缩略图已丢失：不影响已生成的结果图，只是看不到当时的参考图。"
+  reference_missing: "参考图缩略图已丢失：不影响已生成的结果图，只是看不到当时的参考图。",
+  // 统一地址校验（只允许本地 /api、data:/blob: 与官方中转站主机）
+  [IMAGE_SOURCE_REASONS.BLOCKED_HOST]: "原图地址不属于允许的来源（只允许本地归档与官方中转站），已停止加载。",
+  [IMAGE_SOURCE_REASONS.BLOCKED_SCHEME]: "原图地址的协议不被允许（只允许本地归档与 https 官方中转站），已停止加载。",
+  [IMAGE_SOURCE_REASONS.BLOCKED_PROXY_TARGET]: "原图代理地址里的目标地址不合法，已停止加载。",
+  [IMAGE_SOURCE_REASONS.NO_SOURCE]: "这条记录没有可用的图片地址。"
 });
 
 /** 默认文案（没有具体原因码时）。 */
@@ -37,11 +44,13 @@ export function isResultImageMarkedMissing(image) {
  * 结果卡片该显示什么。
  *
  * @param {object} image 记录里的 `image` 对象
+ * @param {(image: object) => string} sourceFromImage 取出地址的函数（快捷生成/批量生成各有一套）
  * @returns {{src: string, missing: boolean, reason: string}}
  *          `missing === true` 时 `src` 一定是空串 → 调用方**不要**渲染 <img>，
  *          这样既不会 404/502，也不会出现"空白卡片无解释"。
  */
 export function resultImageCardState(image, sourceFromImage) {
+  // 服务端已标记的归档缺失最具体，优先用它
   if (isResultImageMarkedMissing(image)) {
     return { src: "", missing: true, reason: resultImageMissingText(image) };
   }
@@ -49,7 +58,23 @@ export function resultImageCardState(image, sourceFromImage) {
   if (!src) {
     return { src: "", missing: true, reason: RESULT_IMAGE_MISSING_REASONS.archive_missing };
   }
+  // 统一地址校验：非白名单的绝对地址（旧中转站、预签名临时链接等）直接判失效、不发请求
+  const verdict = classifyImageSource(src);
+  if (!verdict.allowed) {
+    return {
+      src: "",
+      missing: true,
+      reason: RESULT_IMAGE_MISSING_REASONS[verdict.reason] || RESULT_IMAGE_MISSING_FALLBACK
+    };
+  }
   return { src, missing: false, reason: "" };
+}
+
+/** 参考图缩略图是否允许加载（同一套白名单校验）。 */
+export function isAllowedReferenceImage(reference, sourceFromReference) {
+  const src = typeof sourceFromReference === "function" ? sourceFromReference(reference) : "";
+  if (!src) return false;
+  return classifyImageSource(src).allowed;
 }
 
 /**
