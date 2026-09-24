@@ -1,0 +1,91 @@
+# ============================================================
+# V11 源码版 .gitignore
+# 原则：只提交"源码 + 启动器 + 必要配置 + 测试"；
+#       依赖、构建产物、日志、用户数据、密钥、临时/调试产物一律不进提交。
+# 注意：本文件只影响 Git 提交范围，不删除磁盘上的任何文件。
+# ============================================================
+
+# ---- 依赖与构建产物 ----
+node_modules/
+dist/
+build/
+out/
+.vite/
+*.tsbuildinfo
+
+# ---- 临时构建 / 发布中间目录 ----
+.secure-build/
+.release-temp/
+.codex-artifacts/
+
+# ---- 运行日志 ----
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# ---- 用户数据（历史记录、归档图片、素材、配置）----
+# 这些是用户自己生成/积累的数据，属于个人数据，不进源码库
+data/
+tmp/
+
+# ---- 真实密钥（绝不能进提交）----
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.ppk
+id_rsa*
+id_ed25519*
+*.local
+secrets.json
+credentials.json
+
+# ---- 本地运行时（85.6 MB 二进制，按需生成，不入库）----
+# 保留在磁盘上不删除；用 scripts/provision-local-node.ps1 从官方 Node 生成，
+# 其字节数与 SHA-256 记录在 baselines/*/manifest.json 的 runtime 段。
+runtime/
+
+# ---- 基线快照（内含完整源码副本，属备份产物）----
+# 快照保留在磁盘（如 baselines/V11-baseline-20260925-final），但不进 Git，
+# 避免把整棵源码树再复制一份进版本库。
+baselines/
+
+# ---- 测试输出与覆盖率 ----
+coverage/
+test-results/
+junit*.xml
+*.lcov
+
+# ---- 调试产物与编辑器临时文件 ----
+*.orig
+*.rej
+*.pid
+*.seed
+*.swp
+*~
+# Python 字节码缓存（API/代码模板 里的 Python 模板会产生）
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# ---- 备份文件 ----
+*.bak
+*.backup
+*.old
+*.tmp
+
+# ---- 模板压缩包的二进制副本（.zip）----
+# 同一份模板已经以目录形式入库（如 API/代码模板/lk888-gpt-image-adapter/），
+# 且已按快照基线口径排除（*.zip 不进基线）。保留在磁盘，不进 Git，避免二进制副本重复。
+# 注意：API/代码模板/*.tar.gz 在批准快照基线内，仍正常入库，不在此排除。
+API/代码模板/*.zip

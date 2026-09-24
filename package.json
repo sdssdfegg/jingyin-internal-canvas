@@ -1,0 +1,33 @@
+{
+  "name": "jingyin-internal-canvas",
+  "version": "11.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server/index.js",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "check": "node --check server/index.js && node --check server/channel.js && node --check server/channel-config.js && node --check server/billing-gateway.js && node --check server/video-config.js && node --check server/detail-skills.js && node --check server/detail-ai.js && node --check server/detail-middleware.js && node --check server/reference-ai.js && node --check server/quick-prompt-ai.js && node --check server/outfit-skill.js && node --check server/outfit-pose-ai.js && node --check server/outfit-master-fit-ai.js && node --check server/outfit-quality-ai.js",
+    "build:assets": "node scripts/generate-static-assets.mjs",
+    "release:win": "node scripts/secure-win-release.mjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "lucide-react": "^0.468.0",
+    "multer": "^2.0.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "vite": "^7.2.7"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "javascript-obfuscator": "^5.5.0",
+    "postject": "^1.0.0-alpha.6",
+    "rcedit": "^5.0.2"
+  }
+}

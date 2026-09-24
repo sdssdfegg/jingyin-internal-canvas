@@ -1,0 +1,511 @@
+静音中转站 AI 交接排障手册
+生成日期：2026-08-27
+适用对象：后续接手静音中转站的 AI / 开发人员
+
+重要说明
+============================================================
+1. 这份文件只用于维护“静音中转站”，不要默认修改画板源码或封装版画板。
+2. 画板面向用户的 API 地址是：https://api.jingyin.online/
+   如果客户端需要 OpenAI 格式 Base URL，通常是：https://api.jingyin.online/v1
+3. 服务器内部地址 127.0.0.1:8791 只给 New API 调 LK888 适配器用，画板不要填写这个地址。
+4. 本文件不保存 SSH 密码、上游 API Key、用户 Token。需要时由用户临时提供，或在服务器数据库中只读确认。
+5. 图片渠道不要随便点后台“测试”，有些图片渠道测试会真实扣费。优先看日志；必须真实测试时，只让用户手动画板测一张。
+6. 每次改服务器文件、数据库、Nginx 配置前必须先备份。不要用 git reset、不要清空数据库、不要覆盖未知修改。
+
+
+一、当前正确架构
+============================================================
+用户画板
+  -> https://api.jingyin.online/
+  -> Nginx
+  -> New API 主服务 127.0.0.1:3001
+  -> 按渠道路由到上游
+
+LK888 GPT 图片链路：
+用户画板
+  -> api.jingyin.online /v1/images/generations 或 /v1/images/edits
+  -> New API channel #5 lk888-gpt-image-2
+  -> 服务器本机适配器 http://127.0.0.1:8791
+  -> LK888 上游 https://api.lk888.ai/v1/media/generate
+  -> LK888 任务轮询 /v1/media/status
+  -> 适配器转换回 OpenAI 图片返回格式
+
+老夜 GPT 图片链路：
+用户画板
+  -> api.jingyin.online
+  -> New API channel #1 老夜的渠道
+  -> https://api.luckfill.com
+
+老夜香蕉链路：
+用户画板
+  -> api.jingyin.online
+  -> New API channel #7 laoye-nano-banana-backup
+  -> https://api.luckfill.com
+
+当前策略：
+1. LK888 GPT 图片作为主要低价通道。
+2. 老夜 GPT 图片保留兜底，但它曾出现 4 到 9 分钟才返回的情况，不能当作“速度稳定”的主通道。
+3. 老夜香蕉当前可用，作为 nano-banana2 相关模型通道。
+4. lanlanda-seedance-video 是视频通道，和 GPT/香蕉图片问题不要混在一起改。
+
+
+二、服务器当前设置快照
+============================================================
+服务器：
+IP：154.9.255.54
+系统：Debian GNU/Linux 12 bookworm
+控制面板：雨云/宝塔相关环境
+
+服务：
+new-api-custom.service
+  状态要求：active enabled
+  工作目录：/opt/new-api/data
+  启动命令：/opt/new-api-custom/new-api-custom --port 3001 --log-dir /opt/new-api-custom/logs
+  监听端口：3001
+
+lk888-gpt-image-adapter.service
+  状态要求：active enabled
+  工作目录：/opt/jingyin-lk888-gpt-image-adapter
+  启动命令：/usr/bin/python3 /opt/jingyin-lk888-gpt-image-adapter/server.py
+  运行用户：www:www
+  监听地址：127.0.0.1:8791
+  环境变量：
+    HOST=127.0.0.1
+    PORT=8791
+    LK888_BASE_URL=https://api.lk888.ai
+    LK888_MODEL=tt-image-2
+
+关键文件：
+/opt/new-api/data/one-api.db
+/opt/new-api-custom/logs/oneapi-*.log
+/opt/jingyin-lk888-gpt-image-adapter/server.py
+/opt/jingyin-lk888-gpt-image-adapter/adapter.log
+
+Nginx：
+域名配置：
+/www/server/panel/vhost/nginx/new-api-custom-domain.conf
+
+IP/default 配置：
+/www/server/panel/vhost/nginx/new-api-custom.conf
+
+域名 Nginx 关键要求：
+client_max_body_size 100m
+proxy_read_timeout 600s
+proxy_send_timeout 600s
+proxy_pass http://127.0.0.1:3001
+Access 日志：
+/www/wwwlogs/api.jingyin.online.ssl.access.log
+Error 日志：
+/www/wwwlogs/api.jingyin.online.ssl.error.log
+
+缓存代理预留：
+Nginx 已有 /jy-image-cache/ -> http://127.0.0.1:3018
+当前 3018 由 /opt/jy-image-cache-proxy/proxy.py 监听。
+注意：systemd 的 jingyin-result-cache.service 当前不是 active，但 3018 确实有旧 Python 进程运行。不要把它当成主要修复点；要改缓存代理前，先确认启动方式并补 systemd 管理。
+
+Python 依赖：
+python3-pil 已安装，Pillow 版本 9.4.0。
+这是 LK888 参考图压缩所需依赖，不要随便删除。
+
+
+三、当前渠道配置快照
+============================================================
+状态说明：
+status=1 表示启用。
+status=2 表示禁用。
+不要随便改优先级、权重、模型映射、透传请求体。
+
+channel #1 老夜的渠道
+  type=1
+  status=1
+  priority=70
+  weight=70
+  auto_ban=1
+  test_model=gpt-image-2
+  base_url=https://api.luckfill.com
+  models 包含：
+    gpt-image
+    gpt-image-2
+    以及若干文本模型
+  model_mapping：
+    gpt-image -> gpt-image-2
+  pass_through_body_enabled=false
+  param_override 为空
+  用途：老夜 GPT 图片兜底，也含部分文本模型。
+
+channel #4 lanlanda-seedance-video
+  status=1
+  priority=0
+  weight=0
+  base_url=https://api.lanlanda.com
+  test_model=seedance-2.0
+  用途：视频模型，不要拿它排查 GPT 图片。
+
+channel #5 lk888-gpt-image-2
+  type=1
+  status=1
+  priority=80
+  weight=100
+  auto_ban=1
+  test_model=gpt-image-2
+  base_url=http://127.0.0.1:8791
+  models：
+    gpt-image-2,gpt-image
+  model_mapping：
+    gpt-image -> gpt-image-2
+  pass_through_body_enabled=true
+  param_override 为空
+  用途：LK888 GPT 图片主通道。
+  特别注意：
+    API 地址必须是 http://127.0.0.1:8791，不要加 /v1。
+    必须开启透传请求体，否则 image_size/aspect_ratio 等字段可能丢失。
+
+channel #7 laoye-nano-banana-backup
+  type=1
+  status=1
+  priority=50
+  weight=50
+  auto_ban=1
+  test_model=nano-banana2
+  base_url=https://api.luckfill.com
+  models：
+    nano-banana-pro,nano-banana2
+  pass_through_body_enabled=false
+  param_override 为空
+  用途：老夜香蕉/nano-banana2 通道。
+
+当前数据库中没有启用 7lai、速创、code28 这些临时渠道。后续除非用户明确要求，不要重新添加或恢复它们。
+
+
+四、LK888 适配器必须保留的能力
+============================================================
+文件：
+/opt/jingyin-lk888-gpt-image-adapter/server.py
+
+本地模板：
+D:\静音AI绘画V11（源码）\API\代码模板\lk888-gpt-image-adapter\server.py
+D:\静音AI绘画V11（源码）\API\代码模板\jingyin-lk888-gpt-image-adapter.zip
+D:\静音AI绘画V11（源码）\API\代码模板\jingyin-lk888-gpt-image-adapter.tar.gz
+
+必须支持：
+1. OpenAI 图片入口：
+   POST /v1/images/generations
+   POST /v1/images/edits
+   GET /v1/models
+
+2. 转 LK888 异步接口：
+   POST https://api.lk888.ai/v1/media/generate
+   GET  https://api.lk888.ai/v1/media/status?task_id=...
+
+3. prompt 字段兼容：
+   prompt
+   input
+   text
+   message
+   content
+   messages
+   params/body/payload/request/data 内嵌字段
+
+4. 尺寸映射：
+   画板传：
+     model=gpt-image
+     image_size=2K
+     aspect_ratio=3:4
+   LK888 适配器要转：
+     model=tt-image-2
+     params.size=1728x2304
+
+   当前工作映射：
+     2K + 1:1  -> 2304x2304
+     2K + 3:4  -> 1728x2304
+     2K + 4:3  -> 2304x1728
+     2K + 9:16 -> 1296x2304
+     2K + 16:9 -> 2304x1296
+
+   注意：
+   LK888 文档可能展示过另一组 2K 精确尺寸，但当前中转站实测正常的是这套从画板源码直连逻辑同步来的映射。不要没测试就随便改尺寸。
+
+5. 尺寸容错：
+   如果收到 1086x1448、1024x1536 这类中间尺寸，不要原样传给 LK888。
+   应先识别比例和长边，再归一化成 LK888 可接受的尺寸或 1K/2K 标签。
+
+6. 请求体：
+   MAX_BODY_BYTES 默认 120MB。
+   支持 Transfer-Encoding: chunked。
+   超过上限时要先读完请求体再返回 413，避免 New API 看到 broken pipe。
+
+7. 上传参考图压缩：
+   LK888 对 params.images[0] 有单图解码后不超过 10MB 的限制。
+   适配器必须在转发前把超过 9.5MB 的 multipart/base64 图片压缩成 JPEG。
+   配置：
+     LK888_MAX_UPSTREAM_IMAGE_BYTES=9500000
+     LK888_COMPRESS_INPUT_IMAGES=true
+   URL 图片不下载、不压缩，原样传给 LK888，避免中转站额外耗时。
+
+8. 日志：
+   /opt/jingyin-lk888-gpt-image-adapter/adapter.log
+   可以记录：
+     request_received
+     upstream_request_prepared
+     input_image_compressed
+     upstream_size_retry
+     request_failed
+   不要记录：
+     API Key
+     SSH 密码
+     完整 prompt
+     图片 base64 内容
+
+
+五、排障第一顺序
+============================================================
+遇到画板报错时，不要先改配置。按下面顺序查：
+
+1. 问用户要：
+   发生时间
+   画板报错截图或文字
+   用的是 GPT、香蕉、视频哪一种
+   是文生图还是带参考图
+   有没有手动禁用过某个渠道
+
+2. 登录服务器后先看服务：
+   systemctl is-active new-api-custom.service lk888-gpt-image-adapter.service
+   ss -ltnp | grep -E ':(3001|8791|80|443) '
+   curl -sS --max-time 5 http://127.0.0.1:8791/health; echo
+
+3. 看 New API 原始日志：
+   ls -lt /opt/new-api-custom/logs/oneapi-*.log | head
+   grep -n -E 'POST /v1/images|channel error|relay error|do request failed|EOF|timeout|broken pipe|499|502|500' /opt/new-api-custom/logs/oneapi-最新日志.log | tail -n 200
+
+4. 看 Nginx 请求有没有到达：
+   grep 'POST /v1/images' /www/wwwlogs/api.jingyin.online.ssl.access.log | tail -n 50
+
+5. 如果命中 LK888 channel #5：
+   tail -n 120 /opt/jingyin-lk888-gpt-image-adapter/adapter.log
+   重点看 request_failed.error 和 upstream_request_prepared。
+
+6. 如果命中老夜 channel #1：
+   重点看 use_time_seconds/use_time 和最终状态。
+   老夜可能 200 成功但耗时 4 到 9 分钟，前端已经断开，表现为用户没收到图。
+
+7. 查数据库消费日志，不要查 key：
+   sqlite3 -header -column /opt/new-api/data/one-api.db "SELECT id,datetime(created_at,'unixepoch','localtime') AS time,channel_id,model_name,quota,use_time,request_id,substr(content,1,70) AS content FROM logs ORDER BY id DESC LIMIT 30;"
+
+8. 查当前渠道，不要查 key：
+   sqlite3 -header -column /opt/new-api/data/one-api.db "SELECT id,name,type,status,priority,weight,auto_ban,test_model,base_url,models,model_mapping,param_override,setting FROM channels ORDER BY id;"
+
+
+六、常见问题和解决办法
+============================================================
+问题 1：前端报 lk888_adapter_error
+真实含义：
+前端看到的是被隐藏后的统一错误，不是真正原因。
+
+必须查：
+/opt/jingyin-lk888-gpt-image-adapter/adapter.log
+
+可能原因和解法：
+1. error=参数 size 不合法
+   原因：尺寸没有归一化，或上游不收该像素。
+   解法：保留/恢复尺寸白名单映射和 fallback 重试。
+
+2. error=missing_prompt
+   原因：New API 转发后 prompt 字段位置变化，适配器没读到。
+   解法：保留 prompt/input/text/messages/nested 字段兼容。
+
+3. error=字段 images[0] 文件过大
+   原因：参考图解码后超过 LK888 单图 10MB。
+   解法：保留 python3-pil 和输入图自动压缩到 9.5MB 以下。
+
+4. New API 日志显示 write broken pipe 到 127.0.0.1:8791
+   原因：适配器提前断开或请求体上限过小。
+   解法：MAX_BODY_BYTES 保持 120MB，chunked body 必须支持，超限时先读完再返回 413。
+
+
+问题 2：画板选 2K，但结果像 1K
+判断：
+先看请求命中哪个渠道。
+
+如果命中 LK888：
+看 adapter.log 的 upstream_request_prepared：
+  image_size 是否为 2K
+  aspect_ratio 是否正确
+  params.size 是否为 1728x2304 / 2304x1296 等精确尺寸
+
+如果 params.size 正确但结果仍小：
+可能是 LK888 普通 tt-image-2 自身降采样，需考虑更贵的高清/官转模型，不能只靠中转站修。
+
+如果命中老夜：
+看 New API 日志 content 是否出现“大小 1728x2304”等字段，以及上游真实返回宽高。
+
+
+问题 3：老夜看起来没通
+已有结论：
+老夜配置正常，但 GPT 图片耗时波动大。
+
+证据：
+2026-08-26 23:25:41 老夜 channel_id=1 成功 200，但耗时 418 秒。
+同条记录出现 failed to copy response body: broken pipe，说明前端可能等不住断开。
+2026-08-27 06:46:53 老夜 GPT 成功，用时 27 秒。
+
+判断：
+老夜不是硬故障；它是速度不稳定。
+
+处理：
+1. 不要反复改老夜 base_url、模型映射。
+2. GPT 主链路优先 LK888。
+3. 老夜只做兜底。
+4. 如果客户没收到图但后台扣费，查是否是请求耗时太久导致前端断开。
+
+
+问题 4：New API 后台没有记录，但用户说生成了
+可能原因：
+1. 请求还在执行，New API 通常完成后才写消费日志。
+2. 前端断开后，上游稍后返回，后台再记录成功。
+3. 命中了别的渠道或用户用的是直连上游，不经过静音中转站。
+
+处理：
+按 request_id 或时间查：
+/opt/new-api-custom/logs/oneapi-*.log
+/www/wwwlogs/api.jingyin.online.ssl.access.log
+数据库 logs 表。
+
+
+问题 5：渠道新增后“打架”
+可能原因：
+1. 多个渠道使用同一个模型名，优先级/权重导致随机或不符合预期。
+2. 某个上游实际协议不同，但只做了模型名重定向，没有独立适配器。
+3. New API 标准化过滤了非标准字段，导致 image_size/aspect_ratio 丢失。
+
+处理：
+1. GPT 图片走独立适配器的渠道要开启 pass_through_body_enabled=true。
+2. 不同协议上游不要只靠模型名改名，必须独立适配。
+3. 不要把临时测试渠道和正式渠道放到同模型同优先级。
+4. 修改前先导出现有渠道快照，修改后只验证一张。
+
+
+问题 6：图片下载慢或客户网络限流临时 URL
+当前状态：
+Nginx 已有 /jy-image-cache/ 代理到 127.0.0.1:3018。
+旧缓存代理路径：/opt/jy-image-cache-proxy/proxy.py。
+但 systemd 管理状态不清晰，不能把它当成完全正式功能。
+
+后续要做成正式功能时：
+1. 补 systemd 服务，确保重启服务器后自动恢复。
+2. 增加开关：直连上游 URL / 缓存到中转站。
+3. 设置磁盘占用超过 50% 或 70% 自动删除旧图。
+4. 图片记录最多保留 7 天。
+5. 保证客户收图优先，不要让缓存下载阻塞主接口返回。
+
+
+七、禁止随便改的点
+============================================================
+1. 不要把画板 API 地址改成 127.0.0.1:8791。
+2. 不要把 LK888 channel #5 的 base_url 改成 https://api.lk888.ai，它必须先走本机适配器。
+3. 不要关闭 LK888 channel #5 的透传请求体。
+4. 不要给 LK888 channel #5 写死 param_override 里的 size，否则画板 1K/2K/比例选择会失效。
+5. 不要把 Nginx client_max_body_size 改小，必须保持至少 100m。
+6. 不要把 proxy_read_timeout/proxy_send_timeout 改小，必须保持至少 600s。
+7. 不要删除 python3-pil，否则 LK888 大参考图压缩会失效。
+8. 不要运行旧切换脚本 /opt/jy-channel-switch/use-direct-upstream.sh，里面可能写的是旧域名 api.laoye.online，不是当前 api.luckfill.com。
+9. 不要新增上游后直接放到正式最高优先级，必须先单独禁用其他同类渠道手动测试一张。
+10. 不要把上游 Key 写进 TXT、Markdown、截图备注或聊天最终回复。
+
+
+八、改动前备份命令
+============================================================
+改数据库前：
+TS=$(date +%Y%m%d-%H%M%S)
+cp /opt/new-api/data/one-api.db /opt/new-api/data/one-api.db.bak-${TS}-before-change
+
+改 LK888 适配器前：
+TS=$(date +%Y%m%d-%H%M%S)
+cp /opt/jingyin-lk888-gpt-image-adapter/server.py /opt/jingyin-lk888-gpt-image-adapter/server.py.bak-${TS}-before-change
+
+改 Nginx 前：
+TS=$(date +%Y%m%d-%H%M%S)
+cp /www/server/panel/vhost/nginx/new-api-custom-domain.conf /www/server/panel/vhost/nginx/new-api-custom-domain.conf.bak-${TS}-before-change
+cp /www/server/panel/vhost/nginx/new-api-custom.conf /www/server/panel/vhost/nginx/new-api-custom.conf.bak-${TS}-before-change
+
+改完 Nginx 必须检查：
+nginx -t
+systemctl reload nginx
+
+改完服务必须检查：
+systemctl restart new-api-custom.service
+systemctl is-active new-api-custom.service
+
+systemctl restart lk888-gpt-image-adapter.service
+systemctl is-active lk888-gpt-image-adapter.service
+curl -sS --max-time 5 http://127.0.0.1:8791/health; echo
+
+
+九、已知重要备份点
+============================================================
+/opt/new-api/data/one-api.db.bak-20260826-224524-before-restore-stable-routes
+用途：恢复到删除速创/LK888香蕉临时路由后的稳定渠道配置参考点。
+
+/opt/jingyin-lk888-gpt-image-adapter/server.py.bak-20260826-223823-before-chunked-body
+用途：LK888 适配器修复大请求体前备份。
+
+/opt/jingyin-lk888-gpt-image-adapter/server.py.bak-20260826-225845-before-size-parity
+用途：LK888 适配器修复尺寸映射前备份。
+
+/opt/jingyin-lk888-gpt-image-adapter/server.py.bak-20260826-231202-before-input-image-compress
+用途：LK888 适配器修复参考图自动压缩前备份。
+
+注意：
+不要直接回滚到旧备份，除非明确知道会丢掉哪些后续修复。
+比如回滚到 before-size-parity 会丢掉尺寸修复；回滚到 before-input-image-compress 会丢掉大参考图压缩。
+
+
+十、正常验证标准
+============================================================
+不要用后台自动测试图片渠道。
+
+安全验证：
+1. 服务健康：
+   systemctl is-active new-api-custom.service lk888-gpt-image-adapter.service
+   curl -sS http://127.0.0.1:8791/health
+
+2. LK888 假 Key 格式验证：
+   可以用 invalid-test-key 请求本机适配器。
+   预期：adapter.log 出现 upstream_request_prepared。
+   如果上游返回 API key 无效，说明格式走到上游认证阶段，不代表故障，也不会真实扣费。
+
+3. 真实验证：
+   让用户手动画板生成一张。
+   不要连续点。
+   生成后看 New API logs 和 adapter.log。
+
+成功判断：
+LK888 GPT：
+  New API 日志 channel_id=5，状态 200。
+  adapter.log 有 upstream_request_prepared。
+  如果带大参考图，有 input_image_compressed 或图片本来小于 9.5MB。
+
+老夜 GPT：
+  New API 日志 channel_id=1，状态 200。
+  use_time 可能波动较大；如果超过 180 秒，属于上游体验风险。
+
+老夜香蕉：
+  New API 日志 channel_id=7，模型 nano-banana2，状态 200。
+
+
+十一、后续 AI 接手时的第一句话建议
+============================================================
+如果用户把这份 TXT 发给 AI，可以这样说：
+
+“这是我的静音中转站交接手册。请你只处理中转站问题，不要先动我的画板。先按手册检查服务器服务、渠道配置和日志，确认请求命中哪个 channel，再判断是上游慢、参数丢失、适配器问题还是前端等待超时。不要写入或暴露任何 Key；改动前必须备份。”
+
+
+十二、关联记录文件
+============================================================
+D:\静音AI绘画V11（源码）\API\API问题索引.md
+D:\静音AI绘画V11（源码）\API\问题记录\2026-08-25-GPT图片2K变1K和老夜兜底失败.md
+D:\静音AI绘画V11（源码）\API\问题记录\2026-08-26-封装版静音中转站LK888未适配2K参数.md
+D:\静音AI绘画V11（源码）\API\问题记录\2026-08-26-LK888适配器大图请求体broken-pipe.md
+D:\静音AI绘画V11（源码）\API\问题记录\2026-08-26-LK888参考图超过10MB被上游拒绝.md
+D:\静音AI绘画V11（源码）\API\问题记录\2026-08-26-恢复到稳定渠道配置.md
+D:\静音AI绘画V11（源码）\API\问题记录\2026-08-26-结果图临时URL限流与可开关缓存代理.md
+D:\静音AI绘画V11（源码）\API\中转站重构规划-2026-08-25.md

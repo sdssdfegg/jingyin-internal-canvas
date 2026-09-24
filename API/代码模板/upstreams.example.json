@@ -1,0 +1,47 @@
+{
+  "gateway": {
+    "publicBaseUrl": "https://api.jingyin.online",
+    "timeoutMs": 30000,
+    "maxFailCount": 3,
+    "circuitOpenSeconds": 300
+  },
+  "upstreams": [
+    {
+      "id": "laoye-openai",
+      "file": "upstreams/laoye-openai.ts",
+      "enabled": true,
+      "priority": 10,
+      "weight": 100,
+      "models": ["gpt-5.5"],
+      "env": {
+        "baseUrl": "LAOYE_OPENAI_BASE_URL",
+        "apiKey": "LAOYE_OPENAI_API_KEY"
+      }
+    },
+    {
+      "id": "gpt-image",
+      "file": "upstreams/gpt-image-adapter.ts",
+      "enabled": true,
+      "priority": 20,
+      "weight": 80,
+      "models": ["gpt-image", "nano-banana-pro", "nano-banana", "nano-banana2"],
+      "env": {
+        "baseUrl": "GPT_IMAGE_BASE_URL",
+        "apiKey": "GPT_IMAGE_API_KEY"
+      }
+    },
+    {
+      "id": "video-pool",
+      "file": "upstreams/video-adapter.ts",
+      "enabled": true,
+      "priority": 30,
+      "weight": 60,
+      "models": ["sora2", "sora2-pro", "veo31", "veo31-fast", "kling-o3", "kling3"],
+      "env": {
+        "baseUrl": "VIDEO_BASE_URL",
+        "apiKey": "VIDEO_API_KEY"
+      }
+    }
+  ]
+}
+

@@ -1,0 +1,27 @@
+{
+  "port": 8787,
+  "publicBaseUrl": "https://api.jingyin.online",
+  "cachePrefix": "/result-cache",
+  "cacheDir": "/www/wwwroot/jingyin-result-cache/files",
+  "dataDir": "/www/wwwroot/jingyin-result-cache/data",
+  "enabled": false,
+  "concurrency": 2,
+  "maxFileBytes": 104857600,
+  "downloadTimeoutMs": 120000,
+  "servePendingTimeoutMs": 120000,
+  "allowOriginRedirectOnFailure": true,
+  "allowedHostPatterns": [
+    "*.openai.com",
+    "*.blob.core.windows.net",
+    "*.cloudflarestorage.com",
+    "*.googleusercontent.com",
+    "*.luckfill.com",
+    "*.lk888.ai"
+  ],
+  "cleanup": {
+    "diskHighWatermarkPercent": 50,
+    "diskLowWatermarkPercent": 45,
+    "retentionDays": 7,
+    "intervalMs": 300000
+  }
+}

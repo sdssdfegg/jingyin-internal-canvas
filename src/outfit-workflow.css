@@ -1,0 +1,4674 @@
+.outfitWorkflowEmbedded {
+  --app-bg: #07090d;
+  --shell-bg: #07090d;
+  --sidebar-bg: rgba(12, 13, 20, 0.92);
+  --topbar-bg: rgba(7, 9, 13, 0.88);
+  --panel-bg: rgba(255, 255, 255, 0.045);
+  --panel-strong-bg: rgba(255, 255, 255, 0.055);
+  --input-bg: rgba(255, 255, 255, 0.06);
+  --button-bg: rgba(255, 255, 255, 0.055);
+  --border: rgba(255, 255, 255, 0.1);
+  --text: #eef4f5;
+  --text-soft: #93a0aa;
+  --accent: #1fcfc3;
+  --accent-text: #061515;
+  --accent-border: #1fcfc3;
+  --danger: #ffb3b3;
+  --option-bg: #141821;
+  font-family: Inter, "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  color: #eef4f5;
+  background: #07090d;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+.outfitWorkflowEmbedded * {
+  box-sizing: border-box;
+}
+
+.outfitWorkflowEmbedded {
+  margin: 0;
+  min-width: 1120px;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.outfitWorkflowEmbedded button,
+.outfitWorkflowEmbedded input,
+.outfitWorkflowEmbedded select,
+.outfitWorkflowEmbedded textarea {
+  font: inherit;
+}
+
+.outfitWorkflowEmbedded button {
+  cursor: pointer;
+}
+
+.outfitWorkflowEmbedded button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.outfitWorkflowEmbedded .appShell {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  height: 100vh;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(33, 196, 184, 0.14), transparent 26%),
+    radial-gradient(circle at 88% 12%, rgba(236, 111, 158, 0.12), transparent 30%),
+    #07090d;
+}
+
+.outfitWorkflowEmbedded .sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 14px;
+  background: rgba(12, 13, 20, 0.92);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.outfitWorkflowEmbedded .brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .brand img {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.outfitWorkflowEmbedded .brand h1 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.outfitWorkflowEmbedded .brand span,
+.outfitWorkflowEmbedded .topbar span,
+.outfitWorkflowEmbedded .uploadZone header span,
+.outfitWorkflowEmbedded .resultPanel header span,
+.outfitWorkflowEmbedded .field span,
+.outfitWorkflowEmbedded .promptPanel span,
+.outfitWorkflowEmbedded .thumbMeta span,
+.outfitWorkflowEmbedded .eventPanel span {
+  color: #93a0aa;
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .sidebar nav {
+  display: grid;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .sidebar nav button,
+.outfitWorkflowEmbedded .smallButton,
+.outfitWorkflowEmbedded .primaryButton,
+.outfitWorkflowEmbedded .secondaryButton,
+.outfitWorkflowEmbedded .iconButton,
+.outfitWorkflowEmbedded .tabButton,
+.outfitWorkflowEmbedded .toolbarButton,
+.outfitWorkflowEmbedded .dangerButton,
+.outfitWorkflowEmbedded .thumbActions button,
+.outfitWorkflowEmbedded .cropModeTabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 32px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cad4da;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.outfitWorkflowEmbedded .sidebar nav button {
+  justify-content: flex-start;
+  padding: 0 12px;
+}
+
+.outfitWorkflowEmbedded .sidebar nav button.active {
+  color: #061515;
+  background: #1fcfc3;
+  border-color: #1fcfc3;
+  font-weight: 800;
+}
+
+.outfitWorkflowEmbedded .navDivider {
+  display: block;
+  height: 1px;
+  margin: 4px 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.outfitWorkflowEmbedded .statusBox {
+  margin-top: auto;
+  display: grid;
+  gap: 4px;
+  padding: 13px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.outfitWorkflowEmbedded .statusBox strong {
+  font-size: 26px;
+}
+
+.outfitWorkflowEmbedded .statusBox span {
+  color: #93a0aa;
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .statusBox em {
+  color: #ffb3b3;
+  font-style: normal;
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: auto;
+  padding: 18px 22px 36px;
+}
+
+.outfitWorkflowEmbedded .viewPanel {
+  display: none;
+  min-height: 100%;
+}
+
+.outfitWorkflowEmbedded .viewPanel.active {
+  display: block;
+}
+
+.outfitWorkflowEmbedded .moduleHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel-bg);
+}
+
+.outfitWorkflowEmbedded .moduleHeader h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.outfitWorkflowEmbedded .moduleHeader span {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .moduleHeaderActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .topbar {
+  order: 0;
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: -18px -22px 16px;
+  min-height: 58px;
+  padding: 0 16px;
+  background: rgba(7, 9, 13, 0.88);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.outfitWorkflowEmbedded .resultTabs,
+.outfitWorkflowEmbedded .topActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .resultTabs {
+  flex-wrap: wrap;
+}
+
+.outfitWorkflowEmbedded .topActions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.outfitWorkflowEmbedded .tabButton,
+.outfitWorkflowEmbedded .toolbarButton,
+.outfitWorkflowEmbedded .taskBadge {
+  min-height: 30px;
+  padding: 0 10px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.outfitWorkflowEmbedded .tabButton.active {
+  color: #061515;
+  background: #1fcfc3;
+  border-color: #1fcfc3;
+}
+
+.outfitWorkflowEmbedded .outfitPageNameChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .outfitPageNameChip span {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.outfitWorkflowEmbedded .outfitPageNameChip:hover {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.outfitWorkflowEmbedded .taskBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: #93a0aa;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.outfitWorkflowEmbedded .dangerButton {
+  color: #ff8f8f;
+  background: rgba(255, 90, 90, 0.09);
+  border-color: rgba(255, 120, 120, 0.22);
+}
+
+.outfitWorkflowEmbedded .zoomControl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #93a0aa;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .zoomControl button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 7px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.outfitWorkflowEmbedded .zoomControl > span {
+  position: relative;
+  width: 78px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.outfitWorkflowEmbedded .zoomControl > span::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--zoom-fill);
+  background: #1fcfc3;
+}
+
+.outfitWorkflowEmbedded .task-running {
+  color: #1fcfc3;
+}
+
+.outfitWorkflowEmbedded .task-failed {
+  color: #ffb3b3;
+}
+
+.outfitWorkflowEmbedded .task-success {
+  color: #b8fff9;
+}
+
+.outfitWorkflowEmbedded .topbar h2,
+.outfitWorkflowEmbedded .uploadZone h3,
+.outfitWorkflowEmbedded .resultPanel h3,
+.outfitWorkflowEmbedded .cropModal h2,
+.outfitWorkflowEmbedded .previewModal h2 {
+  margin: 0;
+}
+
+.outfitWorkflowEmbedded .topbar h2 {
+  font-size: 19px;
+}
+
+.outfitWorkflowEmbedded .primaryButton {
+  min-height: 36px;
+  padding: 0 14px;
+  color: #061515;
+  background: #1fcfc3;
+  border-color: #1fcfc3;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.outfitWorkflowEmbedded .secondaryButton,
+.outfitWorkflowEmbedded .smallButton {
+  padding: 0 11px;
+}
+
+.outfitWorkflowEmbedded .secondaryButton:hover,
+.outfitWorkflowEmbedded .smallButton:hover,
+.outfitWorkflowEmbedded .iconButton:hover,
+.outfitWorkflowEmbedded .tabButton:hover,
+.outfitWorkflowEmbedded .toolbarButton:hover,
+.outfitWorkflowEmbedded .dangerButton:hover,
+.outfitWorkflowEmbedded .thumbActions button:hover,
+.outfitWorkflowEmbedded .cropModeTabs button:hover {
+  color: #ffffff;
+  border-color: rgba(31, 207, 195, 0.45);
+}
+
+.outfitWorkflowEmbedded .settingsGrid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.6fr) repeat(6, minmax(110px, 0.7fr)) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.outfitWorkflowEmbedded .field,
+.outfitWorkflowEmbedded .promptPanel label {
+  display: grid;
+  gap: 6px;
+}
+
+.outfitWorkflowEmbedded .field.muted {
+  opacity: 0.56;
+}
+
+.outfitWorkflowEmbedded .field input,
+.outfitWorkflowEmbedded .field select,
+.outfitWorkflowEmbedded .promptPanel textarea {
+  width: 100%;
+  min-width: 0;
+  color: #edf6f7;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  outline: 0;
+}
+
+.outfitWorkflowEmbedded .field input,
+.outfitWorkflowEmbedded .field select {
+  height: 36px;
+  padding: 0 10px;
+}
+
+.outfitWorkflowEmbedded .field select {
+  color-scheme: dark;
+}
+
+.outfitWorkflowEmbedded .field input:disabled,
+.outfitWorkflowEmbedded .field select:disabled {
+  cursor: not-allowed;
+}
+
+.outfitWorkflowEmbedded .keyRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 7px;
+}
+
+.outfitWorkflowEmbedded .keyRow button {
+  border-radius: 7px;
+  color: #b8c5cc;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.outfitWorkflowEmbedded .promptPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.outfitWorkflowEmbedded .promptPanel textarea {
+  height: 82px;
+  resize: vertical;
+  padding: 10px 12px;
+  line-height: 1.55;
+}
+
+.outfitWorkflowEmbedded .uploadGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.outfitWorkflowEmbedded .uploadZone {
+  min-width: 0;
+  min-height: 210px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.outfitWorkflowEmbedded .uploadZone.dragging {
+  border-color: #1fcfc3;
+  box-shadow: 0 0 0 3px rgba(31, 207, 195, 0.12);
+}
+
+.outfitWorkflowEmbedded .uploadZone header,
+.outfitWorkflowEmbedded .resultPanel header,
+.outfitWorkflowEmbedded .cropModal header,
+.outfitWorkflowEmbedded .previewModal header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.outfitWorkflowEmbedded .uploadZone header {
+  margin-bottom: 8px;
+}
+
+.outfitWorkflowEmbedded .uploadZone header > div,
+.outfitWorkflowEmbedded .resultPanel header > div {
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .uploadZone header span {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .uploadTitleLine {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .uploadSlotPrefix {
+  flex: 0 0 auto;
+  color: var(--text);
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.outfitWorkflowEmbedded .uploadEditableText,
+.outfitWorkflowEmbedded .uploadEditableHint {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+
+.outfitWorkflowEmbedded .uploadEditableText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: inherit;
+  font-weight: inherit;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .uploadEditableText:hover,
+.outfitWorkflowEmbedded .uploadEditableHint:hover {
+  color: var(--accent);
+}
+
+.outfitWorkflowEmbedded .uploadEditableHint {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-soft);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .uploadHeaderActions {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+.outfitWorkflowEmbedded .clearUploadButton {
+  color: var(--danger);
+}
+
+.outfitWorkflowEmbedded .uploadZone input[type="file"] {
+  display: none;
+}
+
+.outfitWorkflowEmbedded .thumbGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 10px;
+  min-width: 0;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.outfitWorkflowEmbedded .thumbCard {
+  position: relative;
+  display: grid;
+  grid-template-rows: 132px auto auto;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(9, 12, 18, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.outfitWorkflowEmbedded .thumbCard.sortable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.outfitWorkflowEmbedded .thumbCard.sorting {
+  opacity: 0.46;
+  cursor: grabbing;
+}
+
+.outfitWorkflowEmbedded .thumbCard.replaceTarget {
+  border-color: rgba(0, 0, 0, 0.92);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.52);
+}
+
+.outfitWorkflowEmbedded .thumbCard.replaceTarget .thumbImage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.outfitWorkflowEmbedded .thumbCard.dropBefore::before,
+.outfitWorkflowEmbedded .thumbCard.dropAfter::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 999px;
+  background: #1fcfc3;
+  box-shadow: 0 0 0 3px rgba(31, 207, 195, 0.16);
+}
+
+.outfitWorkflowEmbedded .thumbCard.dropBefore::before {
+  left: -7px;
+}
+
+.outfitWorkflowEmbedded .thumbCard.dropAfter::after {
+  right: -7px;
+}
+
+.outfitWorkflowEmbedded .thumbCard.fixed {
+  border-color: #ec6f9e;
+  box-shadow: 0 0 0 2px rgba(236, 111, 158, 0.18);
+}
+
+.outfitWorkflowEmbedded .thumbCard.localEditReady {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.outfitWorkflowEmbedded .thumbCard.muted {
+  opacity: 0.52;
+}
+
+.outfitWorkflowEmbedded .thumbImage {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.outfitWorkflowEmbedded .thumbImage img,
+.outfitWorkflowEmbedded .taskRefs img,
+.outfitWorkflowEmbedded .taskResult img,
+.outfitWorkflowEmbedded .previewModal img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.outfitWorkflowEmbedded .thumbImage i {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: #061515;
+  background: #1fcfc3;
+  font-style: normal;
+  font-weight: 850;
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .thumbImage .thumbLocalMaskOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0.62;
+  mix-blend-mode: difference;
+  pointer-events: none;
+}
+
+.outfitWorkflowEmbedded .thumbImage .thumbLocalEditOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.outfitWorkflowEmbedded .thumbImage .thumbLocalEditOverlay rect {
+  fill: rgba(31, 207, 195, 0.08);
+  stroke: var(--accent);
+  stroke-width: 10;
+  stroke-dasharray: 28 18;
+  vector-effect: non-scaling-stroke;
+}
+
+.outfitWorkflowEmbedded .dragHandle {
+  position: absolute;
+  right: 7px;
+  top: 7px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: #f3fbfb;
+  background: rgba(6, 21, 21, 0.72);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.outfitWorkflowEmbedded .thumbMeta {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.outfitWorkflowEmbedded .thumbMeta strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .thumbActions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  align-items: start;
+  align-content: start;
+}
+
+.outfitWorkflowEmbedded .thumbActions button {
+  min-height: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.outfitWorkflowEmbedded .thumbActions button.active {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.outfitWorkflowEmbedded .emptyUpload,
+.outfitWorkflowEmbedded .emptyTasks {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 118px;
+  border-radius: 8px;
+  color: #93a0aa;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+}
+
+.outfitWorkflowEmbedded .emptyUpload {
+  grid-column: 1 / -1;
+}
+
+.outfitWorkflowEmbedded .resultPanel {
+  order: 1;
+  margin-top: 14px;
+  padding: 13px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.outfitWorkflowEmbedded .queuePanel {
+  padding: 8px;
+}
+
+.outfitWorkflowEmbedded .queuePanel .taskGrid {
+  margin-top: 0;
+}
+
+.outfitWorkflowEmbedded .taskGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--asset-card-min, 176px), 1fr));
+  gap: 12px;
+  margin-top: 12px;
+  max-height: min(58vh, 620px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.outfitWorkflowEmbedded .taskCard {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel-strong-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.outfitWorkflowEmbedded .taskCard.success {
+  border-color: rgba(31, 207, 195, 0.5);
+}
+
+.outfitWorkflowEmbedded .taskCard.selected {
+  border-color: #1fcfc3;
+  box-shadow: 0 0 0 2px rgba(31, 207, 195, 0.16);
+}
+
+.outfitWorkflowEmbedded .taskCard.downloaded {
+  animation: downloadedPulse 0.9s ease;
+}
+
+.outfitWorkflowEmbedded .savedToast {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 25px;
+  padding: 0 8px;
+  color: #ffffff;
+  background: #197d72;
+  border-radius: 999px;
+  box-shadow: 0 8px 22px rgba(25, 125, 114, 0.32);
+  font-size: 12px;
+  font-weight: 800;
+  animation: savedToastIn 1.05s ease both;
+}
+
+.outfitWorkflowEmbedded .taskCard.failed {
+  border-color: rgba(255, 128, 128, 0.5);
+}
+
+.outfitWorkflowEmbedded .taskRefs {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 42px;
+  overflow: hidden;
+}
+
+.outfitWorkflowEmbedded .taskRefThumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 42px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.outfitWorkflowEmbedded .taskRefThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.outfitWorkflowEmbedded .taskRefThumb b {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  z-index: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.58);
+  font-size: 9px;
+}
+
+.outfitWorkflowEmbedded .taskRefThumb.missing {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.outfitWorkflowEmbedded .taskSelectButton {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border-radius: 999px;
+  color: #061515;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.outfitWorkflowEmbedded .taskSelectButton span {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.outfitWorkflowEmbedded .taskResult {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 220px;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 7px;
+  color: var(--text-soft);
+  background: #ffffff;
+  border: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .taskResult span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .taskCard footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .taskCard footer button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  min-height: 26px;
+  border-radius: 6px;
+  color: var(--accent-text);
+  background: var(--accent);
+  border: 0;
+}
+
+.outfitWorkflowEmbedded .taskCard footer em {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .taskCard footer strong {
+  max-width: 58px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .taskCard footer span {
+  color: var(--text-soft);
+}
+
+.outfitWorkflowEmbedded .taskPrompt {
+  display: -webkit-box;
+  min-height: 34px;
+  max-height: 52px;
+  overflow: hidden;
+  padding: 7px 8px;
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.outfitWorkflowEmbedded .taskCard p {
+  margin: 0;
+  color: #ffb3b3;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.outfitWorkflowEmbedded .assetCard {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  aspect-ratio: 3 / 4;
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel-strong-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  cursor: zoom-in;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.outfitWorkflowEmbedded .outfitAssetCard.success {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.outfitWorkflowEmbedded .outfitAssetCard.failed {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
+  cursor: default;
+}
+
+.outfitWorkflowEmbedded .outfitAssetCard.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent), var(--shadow);
+}
+
+.outfitWorkflowEmbedded .outfitAssetCard.rerunCandidate {
+  border-color: color-mix(in srgb, #f6c55f 62%, var(--border));
+}
+
+.outfitWorkflowEmbedded .outfitAssetCard.cropReturnResult {
+  border-color: color-mix(in srgb, #5bc9b8 52%, var(--border));
+}
+
+.outfitWorkflowEmbedded .outfitAssetCard.replaceTarget {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 58%, transparent), 0 0 0 5px rgba(255, 255, 255, 0.16), var(--shadow);
+}
+
+.outfitWorkflowEmbedded .assetCard img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.18s ease, filter 0.18s ease;
+  will-change: transform;
+}
+
+.outfitWorkflowEmbedded .assetCard:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.outfitWorkflowEmbedded .assetCard:hover img {
+  transform: scale(1.018);
+}
+
+.outfitWorkflowEmbedded .selectBox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: #ffffff;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  filter: drop-shadow(0 2px 7px rgba(0, 0, 0, 0.5));
+}
+
+.outfitWorkflowEmbedded .selectBox svg {
+  fill: color-mix(in srgb, #ffffff 92%, transparent);
+  stroke: #ffffff;
+}
+
+.outfitWorkflowEmbedded .selectBox svg path:first-child,
+.outfitWorkflowEmbedded .selectBox svg rect {
+  fill: color-mix(in srgb, #ffffff 82%, transparent);
+}
+
+.outfitWorkflowEmbedded .assetDownloadButton,
+.outfitWorkflowEmbedded .assetRerunButton,
+.outfitWorkflowEmbedded .assetDeleteButton {
+  position: absolute;
+  right: 9px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border-radius: 999px;
+  color: var(--accent);
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: transform 0.14s ease, background 0.14s ease;
+}
+
+.outfitWorkflowEmbedded .assetDownloadButton {
+  top: 9px;
+}
+
+.outfitWorkflowEmbedded .assetRerunButton {
+  top: 40px;
+  color: var(--accent);
+}
+
+.outfitWorkflowEmbedded .assetDeleteButton {
+  top: 71px;
+  color: #ffb3b3;
+}
+
+.outfitWorkflowEmbedded .assetDownloadButton:hover,
+.outfitWorkflowEmbedded .assetRerunButton:hover,
+.outfitWorkflowEmbedded .assetDeleteButton:hover {
+  transform: translateY(-1px);
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.outfitWorkflowEmbedded .assetDeleteButton:hover {
+  color: #ffffff;
+  border-color: rgba(255, 119, 119, 0.55);
+}
+
+.outfitWorkflowEmbedded .assetRerunButton:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.outfitWorkflowEmbedded .assetDownloadButton.downloaded {
+  color: #ffffff;
+  background: color-mix(in srgb, var(--accent) 82%, #111111 18%);
+  border-color: color-mix(in srgb, #ffffff 36%, transparent);
+  animation: downloadButtonPop 0.72s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.outfitWorkflowEmbedded .assetDownloadButton.downloaded svg {
+  animation: downloadCheckPop 0.72s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.outfitWorkflowEmbedded .assetDownloadButton.downloaded::after {
+  content: "已保存";
+  position: absolute;
+  top: 31px;
+  right: -2px;
+  min-width: 44px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: color-mix(in srgb, var(--accent) 86%, #000000 14%);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: downloadSavedTip 1.24s ease forwards;
+}
+
+.outfitWorkflowEmbedded .assetRerunBadge {
+  position: absolute;
+  top: 72px;
+  right: 8px;
+  z-index: 3;
+  max-width: 88px;
+  overflow: hidden;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #fff6da;
+  background: rgba(111, 75, 8, 0.76);
+  border: 1px solid rgba(246, 197, 95, 0.46);
+  font-size: 10px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .assetCropReturnBadge {
+  position: absolute;
+  top: 72px;
+  left: 8px;
+  z-index: 3;
+  max-width: 92px;
+  overflow: hidden;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #eafffb;
+  background: rgba(20, 111, 102, 0.78);
+  border: 1px solid rgba(132, 234, 221, 0.42);
+  font-size: 10px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .assetTimeBadge {
+  position: absolute;
+  top: 9px;
+  left: 42px;
+  right: 42px;
+  z-index: 2;
+  overflow: hidden;
+  padding: 5px 7px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.36);
+  font-size: 11px;
+  font-weight: 750;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .qualityBadge {
+  position: absolute;
+  top: 40px;
+  left: 42px;
+  right: 42px;
+  z-index: 2;
+  overflow: hidden;
+  padding: 5px 7px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .qualityBadge.pass {
+  color: #eaffef;
+  background: rgba(22, 116, 54, 0.78);
+  border-color: rgba(137, 240, 164, 0.46);
+}
+
+.outfitWorkflowEmbedded .qualityBadge.fail {
+  color: #fff0f0;
+  background: rgba(164, 42, 42, 0.82);
+  border-color: rgba(255, 166, 166, 0.52);
+}
+
+.outfitWorkflowEmbedded .qualityBadge.checking {
+  color: #f4fbff;
+  background: rgba(36, 101, 160, 0.78);
+  border-color: rgba(145, 203, 255, 0.42);
+}
+
+.outfitWorkflowEmbedded .qualityBadge.error,
+.outfitWorkflowEmbedded .qualityBadge.skipped {
+  color: #fff6df;
+  background: rgba(130, 93, 22, 0.82);
+  border-color: rgba(255, 214, 125, 0.46);
+}
+
+.outfitWorkflowEmbedded .referenceThumbTray {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .assetReferenceTray {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 68px;
+  z-index: 5;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.outfitWorkflowEmbedded .referenceMiniThumb,
+.outfitWorkflowEmbedded .referenceMoreThumb,
+.outfitWorkflowEmbedded .referenceCountPill {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 6px;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.46);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-size: 10px;
+  font-weight: 800;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.2);
+  pointer-events: auto;
+}
+
+.outfitWorkflowEmbedded .referenceCountPill {
+  width: auto;
+  max-width: 96px;
+  padding: 0 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .referenceMiniThumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: none !important;
+  transition: none;
+}
+
+.outfitWorkflowEmbedded .referenceMiniThumb img[role="button"] {
+  cursor: zoom-in;
+}
+
+.outfitWorkflowEmbedded .referenceMiniThumb b {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 2px;
+  border-radius: 4px;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.62);
+  font-size: 8px;
+  line-height: 1;
+}
+
+.outfitWorkflowEmbedded .referenceMiniThumb.missing::after {
+  content: "!";
+  font-size: 13px;
+}
+
+.outfitWorkflowEmbedded .imageContextMenu {
+  position: fixed;
+  z-index: 30;
+  width: 180px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.outfitWorkflowEmbedded .imageContextMenu button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  gap: 10px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.outfitWorkflowEmbedded .imageContextMenu button:hover {
+  background: color-mix(in srgb, var(--panel-strong) 86%, var(--accent) 8%);
+}
+
+.outfitWorkflowEmbedded .assetMeta {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 7px;
+  border-radius: 6px;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.42);
+  font-size: 11px;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.outfitWorkflowEmbedded .assetMeta span,
+.outfitWorkflowEmbedded .assetMeta strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .assetPrompt {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 4;
+  display: -webkit-box;
+  max-height: 54px;
+  overflow: hidden;
+  padding: 8px 9px;
+  border-radius: 6px;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.outfitWorkflowEmbedded .assetCard:hover .assetPrompt {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.outfitWorkflowEmbedded .assetCard:hover .assetMeta {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.outfitWorkflowEmbedded .loadingCard {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--accent);
+  border-style: dashed;
+  cursor: default;
+}
+
+.outfitWorkflowEmbedded .loadingCard span {
+  font-size: 13px;
+}
+
+.outfitWorkflowEmbedded .loadingCard strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.outfitWorkflowEmbedded .loadingCard em {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .assetRetryButton {
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--accent-text);
+  background: var(--accent);
+  border: 0;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.outfitWorkflowEmbedded .assetError {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.outfitWorkflowEmbedded .assetError.runtimeStage {
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.outfitWorkflowEmbedded .eventPanel {
+  position: fixed;
+  right: 20px;
+  bottom: 18px;
+  display: grid;
+  gap: 8px;
+  width: 320px;
+  pointer-events: none;
+}
+
+.outfitWorkflowEmbedded .eventPanel div {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(12, 13, 20, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+}
+
+.outfitWorkflowEmbedded .eventPanel em {
+  color: #6f7d87;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.outfitWorkflowEmbedded .modalLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(10px);
+}
+
+.outfitWorkflowEmbedded .cropModal,
+.outfitWorkflowEmbedded .previewModal {
+  width: min(820px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  overflow: auto;
+  border-radius: 8px;
+  background: #141622;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+}
+
+.outfitWorkflowEmbedded .quickLocalEditModal {
+  width: min(940px, calc(100vw - 28px));
+  max-height: calc(100vh - 36px);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  overflow: auto;
+  border-radius: 8px;
+  background: #141622;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+}
+
+.outfitWorkflowEmbedded .quickLocalEditModal header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.outfitWorkflowEmbedded .quickLocalEditModal h2 {
+  margin: 0;
+}
+
+.outfitWorkflowEmbedded .quickLocalEditModal header span {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .iconButton {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+
+.outfitWorkflowEmbedded .cropModeTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .cropModeTabs button {
+  min-height: 30px;
+  padding: 0 12px;
+}
+
+.outfitWorkflowEmbedded .cropModeTabs button.active {
+  color: #061515;
+  background: #1fcfc3;
+  border-color: #1fcfc3;
+  font-weight: 800;
+}
+
+.outfitWorkflowEmbedded .cropRatioPresetGroup {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  padding: 5px;
+  border-radius: 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .cropRatioPresetGroup button {
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  color: var(--text-soft);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .cropRatioPresetGroup button:hover,
+.outfitWorkflowEmbedded .cropRatioPresetGroup button:focus-visible {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.outfitWorkflowEmbedded .cropRatioPresetGroup button.active {
+  color: #061515;
+  background: #1fcfc3;
+  border-color: #1fcfc3;
+  font-weight: 850;
+}
+
+.outfitWorkflowEmbedded .cropPreviewWrap {
+  display: grid;
+  place-items: center;
+  min-height: 420px;
+  border-radius: 8px;
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.04) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.04) 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+}
+
+.outfitWorkflowEmbedded .cropStage {
+  position: relative;
+  width: min(380px, 82vw);
+  max-height: 560px;
+  overflow: hidden;
+  background: #ffffff;
+  border-radius: 7px;
+  border: 2px solid #1fcfc3;
+}
+
+.outfitWorkflowEmbedded .cropStage.interactive {
+  cursor: grab;
+}
+
+.outfitWorkflowEmbedded .cropStage img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform-origin: center center;
+  transform: translate(-50%, -50%);
+  user-select: none;
+  pointer-events: none;
+}
+
+.outfitWorkflowEmbedded .cropStage:not(.interactive) img {
+  inset: 0;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  object-fit: contain;
+}
+
+.outfitWorkflowEmbedded .quickLocalEditStage {
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+  max-height: calc(100vh - 250px);
+  overflow: auto;
+  border-radius: 8px;
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.04) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.04) 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  border: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .quickLocalEditImageWrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  max-height: calc(100vh - 270px);
+}
+
+.outfitWorkflowEmbedded .quickLocalEditImageWrap > img {
+  display: block;
+  max-width: min(820px, calc(100vw - 76px));
+  max-height: calc(100vh - 270px);
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+}
+
+.outfitWorkflowEmbedded .quickLocalMaskCanvas {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.outfitWorkflowEmbedded .quickLocalMaskCanvas.active {
+  pointer-events: auto;
+  cursor: crosshair;
+  mix-blend-mode: difference;
+}
+
+.outfitWorkflowEmbedded .quickLocalBrushCursor {
+  position: absolute;
+  z-index: 5;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.92),
+    0 0 10px rgba(0, 0, 0, 0.34);
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.outfitWorkflowEmbedded .quickLocalBrushCursor.erase {
+  border-color: rgba(0, 0, 0, 0.94);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.95),
+    0 0 10px rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.outfitWorkflowEmbedded .quickLocalCropBox {
+  position: absolute;
+  z-index: 2;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 9999px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.52) inset;
+  cursor: move;
+  touch-action: none;
+}
+
+.outfitWorkflowEmbedded .quickLocalCropBox span {
+  position: absolute;
+  inset: 33.33%;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-width: 1px 0;
+  pointer-events: none;
+}
+
+.outfitWorkflowEmbedded .quickLocalCropBox span::before,
+.outfitWorkflowEmbedded .quickLocalCropBox span::after {
+  position: absolute;
+  top: -33.33%;
+  bottom: -33.33%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.34);
+  content: "";
+}
+
+.outfitWorkflowEmbedded .quickLocalCropBox span::before {
+  left: -33.33%;
+}
+
+.outfitWorkflowEmbedded .quickLocalCropBox span::after {
+  right: -33.33%;
+}
+
+.outfitWorkflowEmbedded .quickLocalCropBox i {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--accent);
+  border: 2px solid #141622;
+}
+
+.outfitWorkflowEmbedded .quickLocalCropHandle-nw {
+  left: -7px;
+  top: -7px;
+  cursor: nwse-resize;
+}
+
+.outfitWorkflowEmbedded .quickLocalCropHandle-ne {
+  right: -7px;
+  top: -7px;
+  cursor: nesw-resize;
+}
+
+.outfitWorkflowEmbedded .quickLocalCropHandle-sw {
+  left: -7px;
+  bottom: -7px;
+  cursor: nesw-resize;
+}
+
+.outfitWorkflowEmbedded .quickLocalCropHandle-se {
+  right: -7px;
+  bottom: -7px;
+  cursor: nwse-resize;
+}
+
+.outfitWorkflowEmbedded .quickLocalMaskContextBox {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  place-items: start end;
+  border: 1px dashed var(--accent);
+  border-radius: 5px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.24);
+  pointer-events: none;
+}
+
+.outfitWorkflowEmbedded .quickLocalMaskContextBox span {
+  margin: 6px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  color: #061515;
+  background: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.outfitWorkflowEmbedded .quickLocalEditControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.outfitWorkflowEmbedded .quickLocalRatioGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-strong-bg);
+}
+
+.outfitWorkflowEmbedded .quickLocalModeGroup,
+.outfitWorkflowEmbedded .quickLocalBrushTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .quickLocalModeGroup button,
+.outfitWorkflowEmbedded .quickLocalBrushTools button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--text-soft);
+  background: var(--panel-strong-bg);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.outfitWorkflowEmbedded .quickLocalModeGroup button.active,
+.outfitWorkflowEmbedded .quickLocalBrushTools button.active,
+.outfitWorkflowEmbedded .quickLocalModeGroup button:hover,
+.outfitWorkflowEmbedded .quickLocalBrushTools button:hover {
+  color: #061515;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.outfitWorkflowEmbedded .quickLocalBrushTools button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.outfitWorkflowEmbedded .quickLocalBrushSwatch {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.64);
+}
+
+.outfitWorkflowEmbedded .quickLocalBrushSwatch.white {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+.outfitWorkflowEmbedded .quickLocalBrushSwatch.black {
+  background: #050505;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.outfitWorkflowEmbedded .quickLocalBrushTools label {
+  min-width: min(190px, 100%);
+}
+
+.outfitWorkflowEmbedded .quickLocalBrushTools input {
+  min-width: 96px;
+}
+
+.outfitWorkflowEmbedded .quickLocalRatioGroup button {
+  min-width: 58px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: var(--text-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.outfitWorkflowEmbedded .quickLocalRatioGroup button.active,
+.outfitWorkflowEmbedded .quickLocalRatioGroup button:hover {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.outfitWorkflowEmbedded .quickLocalEditControls label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: min(360px, 100%);
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.outfitWorkflowEmbedded .quickLocalEditControls input {
+  min-width: 180px;
+}
+
+.outfitWorkflowEmbedded .quickLocalEditControls small {
+  color: var(--text-soft);
+}
+
+.outfitWorkflowEmbedded .quickLocalApplyButton {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.outfitWorkflowEmbedded .quickLocalEditModal footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.outfitWorkflowEmbedded .quickLocalEditModal footer > span {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .quickLocalEditModal footer > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .cropModal footer,
+.outfitWorkflowEmbedded .previewModal footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.outfitWorkflowEmbedded .cropModal footer > span {
+  color: #93a0aa;
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .cropModal footer div,
+.outfitWorkflowEmbedded .previewModal footer {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.outfitWorkflowEmbedded .previewModal {
+  width: min(940px, calc(100vw - 28px));
+  max-height: calc(100vh - 36px);
+  display: grid;
+  grid-template-rows: auto minmax(240px, 1fr) auto auto;
+  gap: 12px;
+  padding: 14px;
+}
+
+.outfitWorkflowEmbedded .previewImageFrame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  max-height: calc(100vh - 180px);
+  overflow: hidden;
+  border-radius: 8px;
+  background: #cfd4d8;
+  border: 1px solid var(--border);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.outfitWorkflowEmbedded .previewImageFrame:active {
+  cursor: grabbing;
+}
+
+.outfitWorkflowEmbedded .previewImageFrame img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: calc(100vh - 180px);
+  object-fit: contain;
+  transform-origin: center center;
+  transition: transform 0.08s ease-out;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.outfitWorkflowEmbedded .previewImageFrame img[draggable="true"] {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.outfitWorkflowEmbedded .previewStageWrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: min(78vh, 820px);
+  min-height: min(520px, calc(100vh - 250px));
+  padding: 0 56px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #cfd4d8;
+  cursor: grab;
+  touch-action: none;
+}
+
+.outfitWorkflowEmbedded .previewStageWrap:active {
+  cursor: grabbing;
+}
+
+.outfitWorkflowEmbedded .previewStage {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  transform-origin: center center;
+  transition: transform 0.08s ease-out;
+  will-change: transform;
+}
+
+.outfitWorkflowEmbedded .previewStage img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 0;
+  user-select: none;
+  pointer-events: none;
+}
+
+.outfitWorkflowEmbedded .previewArrow {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  width: 42px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  color: #ffffff;
+  background: rgba(10, 12, 16, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  font-size: 38px;
+  line-height: 1;
+}
+
+.outfitWorkflowEmbedded .previewArrow:hover {
+  background: rgba(10, 12, 16, 0.68);
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+.outfitWorkflowEmbedded .previewArrowLeft {
+  left: 12px;
+}
+
+.outfitWorkflowEmbedded .previewArrowRight {
+  right: 12px;
+}
+
+.outfitWorkflowEmbedded .previewModal > img {
+  max-height: 72vh;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.outfitWorkflowEmbedded .previewPrompt {
+  display: -webkit-box;
+  max-height: 64px;
+  overflow: hidden;
+  padding: 9px 11px;
+  border-radius: 8px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel-strong-bg) 78%, transparent);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.outfitWorkflowEmbedded .previewPrompt:hover {
+  border-color: var(--accent-border);
+}
+
+.outfitWorkflowEmbedded .previewQualityPanel {
+  display: grid;
+  gap: 8px;
+  padding: 10px 11px;
+  border-radius: 8px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel-strong-bg) 84%, transparent);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.outfitWorkflowEmbedded .previewLocalPastePanel,
+.outfitWorkflowEmbedded .previewCropReturnPanel {
+  display: grid;
+  gap: 8px;
+  padding: 10px 11px;
+  border-radius: 8px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel-strong-bg) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-border) 38%, var(--border));
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.outfitWorkflowEmbedded .previewCropReturnPanel {
+  border-color: color-mix(in srgb, #5bc9b8 42%, var(--border));
+}
+
+.outfitWorkflowEmbedded .previewLocalPastePanel header,
+.outfitWorkflowEmbedded .previewCropReturnPanel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.outfitWorkflowEmbedded .previewLocalPastePanel header strong,
+.outfitWorkflowEmbedded .previewCropReturnPanel header strong {
+  font-size: 13px;
+}
+
+.outfitWorkflowEmbedded .previewQualityPanel.pass {
+  border-color: color-mix(in srgb, #49c85b 44%, var(--border));
+}
+
+.outfitWorkflowEmbedded .previewQualityPanel.fail {
+  border-color: color-mix(in srgb, var(--danger) 54%, var(--border));
+}
+
+.outfitWorkflowEmbedded .previewQualityPanel.checking {
+  border-color: color-mix(in srgb, #56a8ff 46%, var(--border));
+}
+
+.outfitWorkflowEmbedded .previewQualityPanel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.outfitWorkflowEmbedded .previewQualityPanel header strong {
+  font-size: 13px;
+}
+
+.outfitWorkflowEmbedded .previewQualityPanel p,
+.outfitWorkflowEmbedded .previewQualityPanel ul {
+  margin: 0;
+}
+
+.outfitWorkflowEmbedded .previewQualityPanel ul {
+  padding-left: 18px;
+}
+
+.outfitWorkflowEmbedded .previewQualityFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.outfitWorkflowEmbedded .previewQualityFacts span {
+  min-width: 0;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .previewQualityRepair {
+  display: -webkit-box;
+  overflow: hidden;
+  padding: 8px 9px;
+  border-radius: 7px;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.outfitWorkflowEmbedded .previewQualityRepair:hover {
+  border-color: var(--accent-border);
+}
+
+.outfitWorkflowEmbedded .spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes downloadButtonPop {
+  0% {
+    transform: scale(1);
+  }
+  38% {
+    transform: scale(1.16);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes downloadCheckPop {
+  0% {
+    transform: translateY(-2px) scale(0.72);
+    opacity: 0;
+  }
+  42% {
+    transform: translateY(0) scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes downloadSavedTip {
+  0% {
+    transform: translateY(-4px);
+    opacity: 0;
+  }
+  18%,
+  76% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(4px);
+    opacity: 0;
+  }
+}
+
+@keyframes downloadedPulse {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+@keyframes savedToastIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.88);
+  }
+  18% {
+    opacity: 1;
+    transform: translateY(0) scale(1.03);
+  }
+  78% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1280px) {
+  .outfitWorkflowEmbedded {
+    min-width: 980px;
+  }
+
+  .outfitWorkflowEmbedded .settingsGrid {
+    grid-template-columns: repeat(4, minmax(130px, 1fr));
+  }
+
+  .outfitWorkflowEmbedded .field.wide {
+    grid-column: span 2;
+  }
+}
+
+.outfitWorkflowEmbedded {
+  background: var(--shell-bg);
+  color: var(--text);
+}
+
+.outfitWorkflowEmbedded .appShell {
+  color: var(--text);
+  background:
+    radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 26%),
+    radial-gradient(circle at 88% 12%, rgba(236, 111, 158, 0.12), transparent 30%),
+    var(--app-bg);
+}
+
+.outfitWorkflowEmbedded .sidebar {
+  background: var(--sidebar-bg);
+  border-right-color: var(--border);
+}
+
+.outfitWorkflowEmbedded .topbar {
+  background: var(--topbar-bg);
+  border-bottom-color: var(--border);
+}
+
+.outfitWorkflowEmbedded .taskBadge {
+  color: var(--text-soft);
+  background: var(--button-bg);
+  border-color: var(--border);
+}
+
+.outfitWorkflowEmbedded .zoomControl,
+.outfitWorkflowEmbedded .zoomControl button {
+  color: var(--text-soft);
+}
+
+.outfitWorkflowEmbedded .zoomControl button {
+  background: var(--button-bg);
+  border-color: var(--border);
+}
+
+.outfitWorkflowEmbedded .zoomControl > span {
+  background: color-mix(in srgb, var(--text-soft) 24%, transparent);
+}
+
+.outfitWorkflowEmbedded .zoomControl > span::before {
+  background: var(--accent);
+}
+
+.outfitWorkflowEmbedded .dangerButton {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 24%, transparent);
+}
+
+.outfitWorkflowEmbedded .task-running {
+  color: var(--accent);
+}
+
+.outfitWorkflowEmbedded .task-failed {
+  color: var(--danger);
+}
+
+.outfitWorkflowEmbedded .task-success {
+  color: var(--text);
+}
+
+.outfitWorkflowEmbedded .brand span,
+.outfitWorkflowEmbedded .topbar span,
+.outfitWorkflowEmbedded .uploadZone header span,
+.outfitWorkflowEmbedded .resultPanel header span,
+.outfitWorkflowEmbedded .field span,
+.outfitWorkflowEmbedded .promptPanel span,
+.outfitWorkflowEmbedded .composerField span,
+.outfitWorkflowEmbedded .thumbMeta span,
+.outfitWorkflowEmbedded .eventPanel span,
+.outfitWorkflowEmbedded .settingsModal header span,
+.outfitWorkflowEmbedded .promptAssistantModal header span,
+.outfitWorkflowEmbedded .modalField small {
+  color: var(--text-soft);
+}
+
+.outfitWorkflowEmbedded .sidebar nav button,
+.outfitWorkflowEmbedded .settingsEntry,
+.outfitWorkflowEmbedded .smallButton,
+.outfitWorkflowEmbedded .primaryButton,
+.outfitWorkflowEmbedded .secondaryButton,
+.outfitWorkflowEmbedded .iconButton,
+.outfitWorkflowEmbedded .tabButton,
+.outfitWorkflowEmbedded .toolbarButton,
+.outfitWorkflowEmbedded .dangerButton,
+.outfitWorkflowEmbedded .thumbActions button,
+.outfitWorkflowEmbedded .cropModeTabs button,
+.outfitWorkflowEmbedded .composerTabs button,
+.outfitWorkflowEmbedded .promptTabs button,
+.outfitWorkflowEmbedded .themeButton {
+  color: var(--text);
+  background: var(--button-bg);
+  border-color: var(--border);
+}
+
+.outfitWorkflowEmbedded .sidebar nav button.active,
+.outfitWorkflowEmbedded .composerTabs button.active,
+.outfitWorkflowEmbedded .tabButton.active,
+.outfitWorkflowEmbedded .primaryButton,
+.outfitWorkflowEmbedded .cropModeTabs button.active,
+.outfitWorkflowEmbedded .promptTabs button.active,
+.outfitWorkflowEmbedded .themeButton.selected,
+.outfitWorkflowEmbedded .thumbImage i {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.outfitWorkflowEmbedded .secondaryButton:hover,
+.outfitWorkflowEmbedded .smallButton:hover,
+.outfitWorkflowEmbedded .iconButton:hover,
+.outfitWorkflowEmbedded .tabButton:hover,
+.outfitWorkflowEmbedded .toolbarButton:hover,
+.outfitWorkflowEmbedded .dangerButton:hover,
+.outfitWorkflowEmbedded .thumbActions button:hover,
+.outfitWorkflowEmbedded .cropModeTabs button:hover,
+.outfitWorkflowEmbedded .promptTabs button:hover,
+.outfitWorkflowEmbedded .themeButton:hover {
+  border-color: var(--accent-border);
+}
+
+.outfitWorkflowEmbedded .statusBox,
+.outfitWorkflowEmbedded .composerPanel,
+.outfitWorkflowEmbedded .uploadZone,
+.outfitWorkflowEmbedded .resultPanel,
+.outfitWorkflowEmbedded .thumbCard,
+.outfitWorkflowEmbedded .cropModal,
+.outfitWorkflowEmbedded .previewModal,
+.outfitWorkflowEmbedded .settingsModal,
+.outfitWorkflowEmbedded .promptAssistantModal,
+.outfitWorkflowEmbedded .promptEditorModal,
+.outfitWorkflowEmbedded .saveDirectoryModal {
+  color: var(--text);
+  background: var(--panel-bg);
+  border-color: var(--border);
+}
+
+.outfitWorkflowEmbedded .statusBox,
+.outfitWorkflowEmbedded .thumbCard,
+.outfitWorkflowEmbedded .settingsModal,
+.outfitWorkflowEmbedded .promptAssistantModal,
+.outfitWorkflowEmbedded .promptEditorModal,
+.outfitWorkflowEmbedded .cropModal,
+.outfitWorkflowEmbedded .previewModal,
+.outfitWorkflowEmbedded .saveDirectoryModal {
+  background: var(--panel-strong-bg);
+}
+
+.outfitWorkflowEmbedded .field input,
+.outfitWorkflowEmbedded .field select,
+.outfitWorkflowEmbedded .promptPanel textarea,
+.outfitWorkflowEmbedded .composerPanel textarea,
+.outfitWorkflowEmbedded .composerPanel select,
+.outfitWorkflowEmbedded .modalField input,
+.outfitWorkflowEmbedded .editorField input,
+.outfitWorkflowEmbedded .editorField select,
+.outfitWorkflowEmbedded .editorField textarea {
+  color: var(--text);
+  background: var(--input-bg);
+  border-color: var(--border);
+}
+
+.outfitWorkflowEmbedded select {
+  color-scheme: dark;
+}
+
+.outfitWorkflowEmbedded select option {
+  color: var(--text);
+  background: var(--option-bg);
+}
+
+.outfitWorkflowEmbedded .taskCard.success {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.outfitWorkflowEmbedded .taskCard.failed,
+.outfitWorkflowEmbedded .statusBox em,
+.outfitWorkflowEmbedded .taskCard p {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+}
+
+.outfitWorkflowEmbedded .settingsEntry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.outfitWorkflowEmbedded .composerPanel {
+  order: 3;
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 8;
+  display: grid;
+  gap: 8px;
+  max-height: min(48vh, 336px);
+  margin-top: 10px;
+  margin-bottom: 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  box-shadow: 0 -14px 28px rgba(0, 0, 0, 0.22);
+  scrollbar-gutter: stable;
+}
+
+.outfitWorkflowEmbedded .localDetailPageDockPanel {
+  max-height: none;
+  overflow: visible;
+}
+
+.outfitWorkflowEmbedded .localDetailScrollArea {
+  padding-bottom: 10px;
+}
+
+.outfitWorkflowEmbedded .outfitViewPanel.active {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.outfitWorkflowEmbedded .outfitScrollArea {
+  order: 2;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.outfitWorkflowEmbedded .composerStickyControls {
+  display: grid;
+  gap: 8px;
+  margin: 2px -2px -2px;
+  padding: 8px 2px 2px;
+  border-top: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .legacyPanel {
+  display: grid;
+  gap: 14px;
+  min-height: 100%;
+  padding: 16px;
+  color: var(--text);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.outfitWorkflowEmbedded .legacyPanel .moduleHeader {
+  align-items: center;
+}
+
+.outfitWorkflowEmbedded .legacyPanelIcon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-strong-bg);
+}
+
+.outfitWorkflowEmbedded .legacyGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+
+.outfitWorkflowEmbedded .legacyAction {
+  min-height: 76px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 14px;
+  color: var(--text);
+  background: var(--panel-strong-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.outfitWorkflowEmbedded .legacyAction:hover {
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.outfitWorkflowEmbedded .smallButton.active {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.outfitWorkflowEmbedded .workflowVideoPanel {
+  display: grid;
+  gap: 14px;
+  min-height: 100%;
+  color: var(--text);
+}
+
+.outfitWorkflowEmbedded .workflowVideoLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
+  gap: 14px;
+  min-height: 0;
+}
+
+.outfitWorkflowEmbedded .workflowVideoResults,
+.outfitWorkflowEmbedded .workflowVideoComposer {
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+}
+
+.outfitWorkflowEmbedded .workflowVideoResults {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  align-content: start;
+  gap: 12px;
+  overflow: auto;
+}
+
+.outfitWorkflowEmbedded .workflowVideoCard {
+  position: relative;
+  display: grid;
+  min-height: 220px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #050708;
+}
+
+.outfitWorkflowEmbedded .workflowVideoCard video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  object-fit: contain;
+  background: #030405;
+}
+
+.outfitWorkflowEmbedded .workflowVideoCard.loadingCard {
+  place-items: center;
+  gap: 8px;
+  padding: 22px;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.outfitWorkflowEmbedded .workflowVideoCard.loadingCard strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
+.outfitWorkflowEmbedded .workflowVideoCard.loadingCard em {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.outfitWorkflowEmbedded .workflowVideoEmpty {
+  grid-column: 1 / -1;
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  color: var(--text-soft);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.outfitWorkflowEmbedded .workflowVideoComposer {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.outfitWorkflowEmbedded .workflowVideoPriceBadge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel-strong-bg));
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .videoReferenceLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .videoReferenceLine > input[type="file"] {
+  display: none;
+}
+
+.outfitWorkflowEmbedded .videoReferenceTile {
+  position: relative;
+  flex: 0 0 96px;
+  width: 96px;
+  height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  overflow: hidden;
+  color: var(--text-soft);
+  background: var(--panel-strong-bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.outfitWorkflowEmbedded .videoReferenceTile img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.outfitWorkflowEmbedded .videoReferenceTile span {
+  position: relative;
+  z-index: 1;
+  max-width: 82px;
+  overflow: hidden;
+  padding: 3px 6px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .videoReferenceTile svg {
+  position: relative;
+  z-index: 1;
+}
+
+.outfitWorkflowEmbedded .videoUrlInput {
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 34px;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.outfitWorkflowEmbedded .workflowVideoControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .workflowVideoControls select {
+  width: auto;
+  min-width: 86px;
+  height: 32px;
+}
+
+.outfitWorkflowEmbedded .workflowVideoBadge {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 9px;
+  color: #f2bc74;
+  background: rgba(242, 188, 116, 0.11);
+  border: 1px solid rgba(242, 188, 116, 0.34);
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.outfitWorkflowEmbedded .promptAssistantDock {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  gap: 12px;
+  min-height: 0;
+}
+
+.outfitWorkflowEmbedded .composerHeader,
+.outfitWorkflowEmbedded .composerPageRow,
+.outfitWorkflowEmbedded .leftTools,
+.outfitWorkflowEmbedded .rightTools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .composerHeader,
+.outfitWorkflowEmbedded .composerFooter {
+  justify-content: flex-start;
+}
+
+.outfitWorkflowEmbedded .composerFooter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.outfitWorkflowEmbedded .composerHeader {
+  display: none;
+}
+
+.outfitWorkflowEmbedded .composerTabs {
+  display: flex;
+  gap: 7px;
+}
+
+.outfitWorkflowEmbedded .composerTabs button,
+.outfitWorkflowEmbedded .promptTabs button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.outfitWorkflowEmbedded .composerField {
+  display: grid;
+  gap: 6px;
+}
+
+.outfitWorkflowEmbedded .composerField textarea {
+  height: clamp(52px, 9vh, 76px);
+  min-height: 52px;
+  resize: vertical;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  line-height: 1.45;
+  outline: 0;
+}
+
+.outfitWorkflowEmbedded .composerNote textarea {
+  height: clamp(40px, 6vh, 50px);
+  min-height: 40px;
+}
+
+.outfitWorkflowEmbedded .rightTools,
+.outfitWorkflowEmbedded .leftTools {
+  flex-wrap: wrap;
+}
+
+.outfitWorkflowEmbedded .composerPageRow {
+  width: 100%;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .leftTools,
+.outfitWorkflowEmbedded .rightTools {
+  flex: 0 0 auto;
+}
+
+.outfitWorkflowEmbedded .rightTools {
+  width: 100%;
+  margin-left: 0;
+  justify-content: flex-end;
+}
+
+.outfitWorkflowEmbedded .outfitPageDock {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 2px 4px;
+  scrollbar-width: thin;
+}
+
+.outfitWorkflowEmbedded .outfitPageTab {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  max-width: 160px;
+  padding: 0 11px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  background: var(--input-bg);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.outfitWorkflowEmbedded .outfitPageTab:active {
+  cursor: pointer;
+}
+
+.outfitWorkflowEmbedded .outfitPageTab.dragging {
+  opacity: 0.48;
+}
+
+.outfitWorkflowEmbedded .outfitPageTab.drop-before::before,
+.outfitWorkflowEmbedded .outfitPageTab.drop-after::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.outfitWorkflowEmbedded .outfitPageTab.drop-before::before {
+  left: -5px;
+}
+
+.outfitWorkflowEmbedded .outfitPageTab.drop-after::after {
+  right: -5px;
+}
+
+.outfitWorkflowEmbedded .outfitPageDragHandle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.76;
+  cursor: grab;
+}
+
+.outfitWorkflowEmbedded .outfitPageDragHandle:active {
+  cursor: grabbing;
+}
+
+.outfitWorkflowEmbedded .outfitPageTab span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.outfitWorkflowEmbedded .outfitPageTab.active {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.outfitWorkflowEmbedded .outfitPageAdd,
+.outfitWorkflowEmbedded .outfitPageLock,
+.outfitWorkflowEmbedded .outfitPageDelete {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 7px;
+}
+
+.outfitWorkflowEmbedded .outfitPageAdd {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 44%, var(--border));
+}
+
+.outfitWorkflowEmbedded .outfitPageAdd:hover {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.outfitWorkflowEmbedded .outfitPageLock {
+  color: var(--text-soft);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .outfitPageLock.locked {
+  color: var(--accent-text);
+  background: color-mix(in srgb, var(--accent) 86%, transparent);
+  border-color: var(--accent-border);
+}
+
+.outfitWorkflowEmbedded .outfitPageDelete {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--border));
+}
+
+.outfitWorkflowEmbedded .outfitPageDelete:hover {
+  color: #ffffff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.outfitWorkflowEmbedded .rightTools select {
+  height: 32px;
+  min-width: 92px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: 0;
+}
+
+.outfitWorkflowEmbedded .rightTools select.mixed {
+  color: var(--text-soft);
+  border-color: color-mix(in srgb, var(--text-soft) 42%, transparent);
+}
+
+.outfitWorkflowEmbedded .garmentPartPresetGroup,
+.outfitWorkflowEmbedded .garmentPartPicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--input-bg);
+}
+
+.outfitWorkflowEmbedded .garmentPartPresetGroup button,
+.outfitWorkflowEmbedded .garmentPartPicker button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+  min-width: 50px;
+  padding: 0 7px;
+  border-radius: 5px;
+  color: var(--text-soft);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .garmentPartPresetGroup button svg,
+.outfitWorkflowEmbedded .garmentPartPicker button svg {
+  opacity: 0;
+}
+
+.outfitWorkflowEmbedded .garmentPartPresetGroup button.active,
+.outfitWorkflowEmbedded .garmentPartPicker button.active {
+  color: var(--accent-text);
+  background: color-mix(in srgb, var(--accent) 78%, transparent);
+}
+
+.outfitWorkflowEmbedded .garmentPartPresetGroup button.active svg,
+.outfitWorkflowEmbedded .garmentPartPicker button.active svg {
+  opacity: 1;
+}
+
+.outfitWorkflowEmbedded .garmentTransferControls {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .garmentLengthControls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.outfitWorkflowEmbedded .garmentLengthControls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .garmentLengthControls label.disabled {
+  opacity: 0.46;
+}
+
+.outfitWorkflowEmbedded .garmentLengthControls select {
+  height: 28px;
+  min-width: 112px;
+  max-width: 132px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: 0;
+  color: var(--text);
+  background: var(--input-bg);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.outfitWorkflowEmbedded .garmentLengthControls select:disabled {
+  color: var(--text-soft);
+  cursor: not-allowed;
+}
+
+/* 中文注释：母版版型控制区给足文本查看空间，方便检查袖口、扣合和扎法等长规格。 */
+.outfitWorkflowEmbedded .masterFitControls {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--input-bg) 76%, transparent);
+}
+
+.outfitWorkflowEmbedded .masterFitControls.ready {
+  border-color: color-mix(in srgb, #49c85b 52%, var(--border));
+}
+
+.outfitWorkflowEmbedded .masterFitHeader,
+.outfitWorkflowEmbedded .masterFitActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .masterFitHeader > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .masterFitHeader strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.outfitWorkflowEmbedded .masterFitHeader span,
+.outfitWorkflowEmbedded .masterFitSource {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .masterFitSwitch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 21px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-soft) 28%, transparent);
+}
+
+.outfitWorkflowEmbedded .masterFitSwitch i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.18s ease;
+}
+
+.outfitWorkflowEmbedded .masterFitSwitch.on {
+  border-color: color-mix(in srgb, #49c85b 58%, var(--border));
+  background: #49c85b;
+}
+
+.outfitWorkflowEmbedded .masterFitSwitch.on i {
+  transform: translateX(17px);
+}
+
+.outfitWorkflowEmbedded .masterFitSwitch:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.outfitWorkflowEmbedded .masterFitActions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.outfitWorkflowEmbedded .masterFitActions .smallButton {
+  min-height: 28px;
+  height: 28px;
+}
+
+.outfitWorkflowEmbedded .masterFitSource {
+  flex: 1 1 120px;
+}
+
+.outfitWorkflowEmbedded .masterFitPromptPreview {
+  display: none;
+  min-height: 36px;
+  max-height: 72px;
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.outfitWorkflowEmbedded .masterFitControls textarea {
+  width: 100%;
+  min-height: 174px;
+  max-height: 320px;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: 0;
+  resize: vertical;
+  color: var(--text);
+  background: var(--input-bg);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.outfitWorkflowEmbedded .masterFitControls textarea:focus {
+  border-color: var(--accent-border);
+}
+
+.outfitWorkflowEmbedded .masterFitPromptLayer {
+  z-index: 28;
+  background: rgba(0, 0, 0, 0.68);
+}
+
+.outfitWorkflowEmbedded .masterFitPromptModal {
+  display: grid;
+  grid-template-rows: auto minmax(320px, 1fr) auto;
+  gap: 12px;
+  width: min(900px, calc(100vw - 32px));
+  height: min(700px, calc(100vh - 42px));
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel-strong-bg);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
+}
+
+.outfitWorkflowEmbedded .masterFitPromptModal header,
+.outfitWorkflowEmbedded .masterFitPromptModal footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.outfitWorkflowEmbedded .masterFitPromptModal h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.outfitWorkflowEmbedded .masterFitPromptModal header span,
+.outfitWorkflowEmbedded .masterFitPromptModal footer span {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.outfitWorkflowEmbedded .masterFitPromptModal textarea {
+  min-width: 0;
+  width: 100%;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: 0;
+  resize: none;
+  color: var(--text);
+  background: var(--input-bg);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.outfitWorkflowEmbedded .masterFitPromptModal textarea:focus {
+  border-color: var(--accent-border);
+}
+
+.outfitWorkflowEmbedded .smartInterventionSwitch,
+.outfitWorkflowEmbedded .qualityCheckSwitch,
+.outfitWorkflowEmbedded .batchSkillRulesSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  min-width: 116px;
+  padding: 0 9px 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  background: var(--input-bg);
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .smartInterventionSwitch span,
+.outfitWorkflowEmbedded .qualityCheckSwitch span,
+.outfitWorkflowEmbedded .batchSkillRulesSwitch span {
+  min-width: 52px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.outfitWorkflowEmbedded .smartInterventionSwitch i,
+.outfitWorkflowEmbedded .qualityCheckSwitch i,
+.outfitWorkflowEmbedded .batchSkillRulesSwitch i {
+  position: relative;
+  display: inline-flex;
+  width: 42px;
+  height: 22px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-soft) 28%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 78%, transparent);
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.outfitWorkflowEmbedded .smartInterventionSwitch i b,
+.outfitWorkflowEmbedded .qualityCheckSwitch i b,
+.outfitWorkflowEmbedded .batchSkillRulesSwitch i b {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.32);
+  transition: transform 0.18s ease;
+}
+
+.outfitWorkflowEmbedded .smartInterventionSwitch.on,
+.outfitWorkflowEmbedded .qualityCheckSwitch.on,
+.outfitWorkflowEmbedded .batchSkillRulesSwitch.on {
+  border-color: color-mix(in srgb, #49c85b 48%, var(--border));
+}
+
+.outfitWorkflowEmbedded .smartInterventionSwitch.on i,
+.outfitWorkflowEmbedded .qualityCheckSwitch.on i,
+.outfitWorkflowEmbedded .batchSkillRulesSwitch.on i {
+  background: #49c85b;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #ffffff 20%, transparent);
+}
+
+.outfitWorkflowEmbedded .smartInterventionSwitch.on i b,
+.outfitWorkflowEmbedded .qualityCheckSwitch.on i b,
+.outfitWorkflowEmbedded .batchSkillRulesSwitch.on i b {
+  transform: translateX(20px);
+}
+
+.outfitWorkflowEmbedded .composerStatus {
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: 7px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .assetGrid {
+  order: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.outfitWorkflowEmbedded .assetSide {
+  display: grid;
+  grid-template-columns: minmax(0, 2.65fr) minmax(340px, 1fr);
+  gap: 12px;
+  height: auto;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.outfitWorkflowEmbedded .uploadZoneBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .uploadZone.hasSideControls .uploadZoneBody {
+  grid-template-columns: minmax(0, 1fr) minmax(248px, 0.48fr);
+  align-items: stretch;
+}
+
+.outfitWorkflowEmbedded .uploadZone.compact.hasSideControls .uploadZoneBody {
+  grid-template-columns: minmax(236px, 0.38fr) minmax(300px, 0.62fr);
+  align-items: start;
+}
+
+.outfitWorkflowEmbedded .uploadZoneSideControls {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+}
+
+.outfitWorkflowEmbedded .assetSide .uploadZoneFooter {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.outfitWorkflowEmbedded .assetSide .uploadZoneFooterControls {
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.outfitWorkflowEmbedded .assetSide .bulkModeControl {
+  justify-content: space-between;
+  width: 100%;
+}
+
+.outfitWorkflowEmbedded .assetSide .uploadZoneFooter small {
+  align-self: flex-end;
+}
+
+.outfitWorkflowEmbedded .uploadZone.primary {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.outfitWorkflowEmbedded .uploadZone.primary .thumbGrid {
+  flex: 0 0 auto;
+  min-height: 0;
+  grid-template-columns: repeat(var(--upload-columns, 10), minmax(0, 1fr));
+  max-height: none;
+  align-content: start;
+  align-items: start;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  padding: 0 4px 4px 0;
+}
+
+.outfitWorkflowEmbedded .uploadZone.primary .thumbCard {
+  grid-template-rows: 86px auto auto;
+  gap: 5px;
+  padding: 6px;
+  align-self: start;
+}
+
+.outfitWorkflowEmbedded .uploadZone.primary .thumbMeta {
+  gap: 0;
+}
+
+.outfitWorkflowEmbedded .uploadZone.primary .thumbMeta strong {
+  font-size: 11px;
+}
+
+.outfitWorkflowEmbedded .uploadZone.primary .thumbMeta span {
+  display: none;
+}
+
+.outfitWorkflowEmbedded .uploadZone.primary .thumbActions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.outfitWorkflowEmbedded .uploadZone.primary .thumbActions button {
+  min-height: 26px;
+  height: 26px;
+  padding: 0;
+}
+
+.outfitWorkflowEmbedded .uploadZone.compact {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.outfitWorkflowEmbedded .uploadZone.compact .thumbGrid {
+  flex: 0 1 auto;
+  min-height: 0;
+  grid-template-columns: repeat(var(--upload-columns, 2), 96px);
+  max-height: none;
+  align-content: start;
+  align-items: start;
+  justify-content: start;
+}
+
+.outfitWorkflowEmbedded .uploadZone.compact .thumbCard {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 86px auto auto;
+  gap: 5px;
+  padding: 7px;
+  align-self: start;
+  width: 96px;
+}
+
+.outfitWorkflowEmbedded .uploadZone.compact .thumbImage {
+  width: 100%;
+  height: 86px;
+}
+
+.outfitWorkflowEmbedded .uploadZone.compact .thumbActions {
+  grid-column: auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.outfitWorkflowEmbedded .uploadZone.compact .thumbActions button {
+  min-height: 26px;
+  height: 26px;
+}
+
+.outfitWorkflowEmbedded .uploadZone.primary .emptyUpload {
+  min-height: 82px;
+  height: 100%;
+}
+
+.outfitWorkflowEmbedded .uploadZone.compact .emptyUpload {
+  min-height: 92px;
+  width: 202px;
+  max-width: 100%;
+  grid-column: 1 / -1;
+}
+
+.outfitWorkflowEmbedded .uploadZone.compact .thumbMeta {
+  gap: 0;
+}
+
+.outfitWorkflowEmbedded .uploadZone.compact .thumbMeta strong {
+  font-size: 11px;
+}
+
+.outfitWorkflowEmbedded .uploadZone.compact .thumbMeta span {
+  display: none;
+}
+
+.outfitWorkflowEmbedded .assetSide .uploadZone.compact .thumbGrid {
+  grid-template-columns: repeat(auto-fill, minmax(112px, 112px));
+  gap: 10px;
+}
+
+.outfitWorkflowEmbedded .assetSide .uploadZone.compact .thumbCard {
+  grid-template-rows: 86px auto auto;
+  gap: 5px;
+  width: 112px;
+  padding: 6px;
+}
+
+.outfitWorkflowEmbedded .assetSide .uploadZone.compact .thumbActions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.outfitWorkflowEmbedded .assetSide .uploadZone.compact .thumbActions button {
+  min-height: 26px;
+  height: 26px;
+  padding: 0;
+}
+
+.outfitWorkflowEmbedded .assetSide .uploadZone.compact .emptyUpload {
+  width: 100%;
+  min-height: 112px;
+}
+
+.outfitWorkflowEmbedded .uploadZoneFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .uploadZoneFooterControls {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .bulkModeControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .bulkModeControl span {
+  color: var(--text-soft);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .bulkModeControl select {
+  height: 28px;
+  min-width: 108px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: 0;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.outfitWorkflowEmbedded .bulkModeControl select.mixed {
+  color: var(--text-soft);
+}
+
+.outfitWorkflowEmbedded .uploadZoneFooter small {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .thumbImage {
+  border: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .thumbImage em {
+  position: absolute;
+  left: 7px;
+  bottom: 7px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(16, 18, 24, 0.78);
+  font-style: normal;
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.outfitWorkflowEmbedded .thumbImage.mode-soft {
+  background: linear-gradient(135deg, #f7d7e2, #fff6fa 52%, #e8f5f4);
+}
+
+.outfitWorkflowEmbedded .thumbImage.mode-original {
+  background:
+    linear-gradient(45deg, rgba(0, 0, 0, 0.08) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(0, 0, 0, 0.08) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(0, 0, 0, 0.08) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(0, 0, 0, 0.08) 75%);
+  background-size: 18px 18px;
+  background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+}
+
+.outfitWorkflowEmbedded .originalLibraryPanel {
+  order: 4;
+  display: none;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel-bg);
+}
+
+.outfitWorkflowEmbedded .originalLibraryPanel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.outfitWorkflowEmbedded .originalLibraryPanel h3 {
+  margin: 0;
+}
+
+.outfitWorkflowEmbedded .originalLibraryPanel header span,
+.outfitWorkflowEmbedded .originalLibraryCard span,
+.outfitWorkflowEmbedded .emptyOriginal span {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .originalLibraryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  max-height: 188px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.outfitWorkflowEmbedded .originalLibraryCard {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px;
+  border-radius: 8px;
+  background: var(--panel-strong-bg);
+  border: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .originalLibraryCard > button:first-child {
+  width: 54px;
+  height: 68px;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 7px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .originalLibraryCard img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.outfitWorkflowEmbedded .originalLibraryCard div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.outfitWorkflowEmbedded .originalLibraryCard strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .originalLibraryCard > button:last-child {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 7px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.outfitWorkflowEmbedded .emptyOriginal {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  gap: 7px;
+  min-height: 90px;
+  color: var(--text-soft);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.outfitWorkflowEmbedded .batchResizePanel {
+  order: 5;
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel-bg);
+  scroll-margin-top: 72px;
+}
+
+.outfitWorkflowEmbedded .batchResizePanel.dragging {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.outfitWorkflowEmbedded .batchResizePanel input[type="file"] {
+  display: none;
+}
+
+.outfitWorkflowEmbedded .batchResizeHeader,
+.outfitWorkflowEmbedded .batchResizeFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.outfitWorkflowEmbedded .batchResizeHeader h3 {
+  margin: 0;
+}
+
+.outfitWorkflowEmbedded .batchResizeHeader span,
+.outfitWorkflowEmbedded .batchResizeFooter span,
+.outfitWorkflowEmbedded .resizeMeta span,
+.outfitWorkflowEmbedded .resizeDropHint em {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .batchResizeActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .resizeControlGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.outfitWorkflowEmbedded .resizeSegment,
+.outfitWorkflowEmbedded .resizeSwatches,
+.outfitWorkflowEmbedded .resizeCropTemplate,
+.outfitWorkflowEmbedded .resizeSummary {
+  display: grid;
+  gap: 6px;
+}
+
+.outfitWorkflowEmbedded .resizeSegment > span,
+.outfitWorkflowEmbedded .resizeSwatches > span,
+.outfitWorkflowEmbedded .resizeCropTemplate > span {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .resizeSegment div,
+.outfitWorkflowEmbedded .resizeSwatches div,
+.outfitWorkflowEmbedded .resizeCropTemplate div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .resizeSegment button,
+.outfitWorkflowEmbedded .resizeSwatches button,
+.outfitWorkflowEmbedded .resizeCropTemplate button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  background: var(--button-bg);
+}
+
+.outfitWorkflowEmbedded .resizeSegment button.active {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 800;
+}
+
+.outfitWorkflowEmbedded .resizeSegment.muted,
+.outfitWorkflowEmbedded .resizeSwatches.muted,
+.outfitWorkflowEmbedded .resizeCropTemplate.muted {
+  opacity: 0.58;
+}
+
+.outfitWorkflowEmbedded .resizeCropTemplate small {
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.outfitWorkflowEmbedded .localDetailPanel {
+  display: grid;
+  gap: 14px;
+}
+
+.outfitWorkflowEmbedded .localDetailLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.outfitWorkflowEmbedded .localDetailSide {
+  display: grid;
+  grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+  gap: 14px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .localActionPanel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel-bg);
+}
+
+.outfitWorkflowEmbedded .localActionPanel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.outfitWorkflowEmbedded .localActionPanel h3 {
+  margin: 0;
+}
+
+.outfitWorkflowEmbedded .localActionPanel header span,
+.outfitWorkflowEmbedded .localMetric span,
+.outfitWorkflowEmbedded .localActionPanel p {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .localMetric {
+  display: grid;
+  gap: 4px;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-strong-bg);
+}
+
+.outfitWorkflowEmbedded .localMetric strong {
+  font-size: 14px;
+}
+
+.outfitWorkflowEmbedded .localPromptField textarea {
+  width: 100%;
+  min-height: 92px;
+  padding: 9px 10px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.outfitWorkflowEmbedded .localOptionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.outfitWorkflowEmbedded .localActionButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .localResultPreview {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  text-align: left;
+  color: var(--text-soft);
+  background: var(--panel-strong-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.outfitWorkflowEmbedded .localResultPreview img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: 7px;
+}
+
+.outfitWorkflowEmbedded .localResultPreview span {
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .localActionPanel p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.outfitWorkflowEmbedded .resizeSwatches button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.outfitWorkflowEmbedded .resizeSwatches button i {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--swatch);
+  border: 1px solid rgba(0, 0, 0, 0.24);
+}
+
+.outfitWorkflowEmbedded .resizeSwatches button.active {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.outfitWorkflowEmbedded .resizeSummary {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-strong-bg);
+}
+
+.outfitWorkflowEmbedded .resizeSummary strong {
+  font-size: 13px;
+}
+
+.outfitWorkflowEmbedded .resizeSummary span {
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.outfitWorkflowEmbedded .resizeDropHint {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 10px;
+  align-items: center;
+  min-height: 76px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-strong-bg) 52%, transparent);
+}
+
+.outfitWorkflowEmbedded .resizeDropHint svg {
+  grid-row: 1 / span 2;
+  color: var(--accent);
+}
+
+.outfitWorkflowEmbedded .resizeDropHint span {
+  font-weight: 750;
+}
+
+.outfitWorkflowEmbedded .resizeDropHint em {
+  min-width: 0;
+  overflow: hidden;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .resizeImageGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(154px, 1fr));
+  gap: 10px;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.outfitWorkflowEmbedded .resizeImageCard {
+  display: grid;
+  grid-template-rows: 132px auto 28px;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-strong-bg);
+}
+
+.outfitWorkflowEmbedded .resizeImageCard.customized {
+  border-color: var(--accent-border);
+}
+
+.outfitWorkflowEmbedded .resizeThumb {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.outfitWorkflowEmbedded .resizeThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.outfitWorkflowEmbedded .resizeThumb i {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  color: var(--accent-text);
+  background: var(--accent);
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.outfitWorkflowEmbedded .resizeMeta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .resizeMeta strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .resizeCardActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.outfitWorkflowEmbedded .resizeCardActions button {
+  display: grid;
+  place-items: center;
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  background: var(--button-bg);
+}
+
+.outfitWorkflowEmbedded .resizeEmpty {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 170px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-soft);
+  background: color-mix(in srgb, var(--panel-strong-bg) 45%, transparent);
+}
+
+.outfitWorkflowEmbedded .settingsModal,
+.outfitWorkflowEmbedded .promptAssistantModal,
+.outfitWorkflowEmbedded .saveDirectoryModal {
+  width: min(680px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  display: grid;
+  gap: 16px;
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+
+.outfitWorkflowEmbedded .settingsModal header,
+.outfitWorkflowEmbedded .promptAssistantModal header,
+.outfitWorkflowEmbedded .promptEditorModal header,
+.outfitWorkflowEmbedded .saveDirectoryModal header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.outfitWorkflowEmbedded .settingsModal h2,
+.outfitWorkflowEmbedded .promptAssistantModal h2,
+.outfitWorkflowEmbedded .promptEditorModal h2,
+.outfitWorkflowEmbedded .saveDirectoryModal h2 {
+  margin: 0;
+}
+
+.outfitWorkflowEmbedded .modalField {
+  display: grid;
+  gap: 7px;
+}
+
+.outfitWorkflowEmbedded .modalField > span,
+.outfitWorkflowEmbedded .skinBlock > span,
+.outfitWorkflowEmbedded .debugBlock > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .debugBlock {
+  display: grid;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .debugBlock p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.outfitWorkflowEmbedded .debugActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .connectionHint {
+  display: block;
+  margin-top: 6px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.outfitWorkflowEmbedded .connectionHint.running {
+  color: var(--text-soft);
+}
+
+.outfitWorkflowEmbedded .connectionHint.ok {
+  color: #49c85b;
+}
+
+.outfitWorkflowEmbedded .connectionHint.error {
+  color: var(--danger);
+}
+
+.outfitWorkflowEmbedded .apiKeyRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px auto;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .apiKeyRow input {
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: 0;
+}
+
+.outfitWorkflowEmbedded .saveDirectoryModal {
+  width: min(620px, calc(100vw - 48px));
+}
+
+.outfitWorkflowEmbedded .directoryModalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .saveKeyButton {
+  min-width: 82px;
+}
+
+.outfitWorkflowEmbedded .skinBlock {
+  display: grid;
+  gap: 10px;
+}
+
+.outfitWorkflowEmbedded .themeGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.outfitWorkflowEmbedded .themeButton {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  min-height: 70px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.outfitWorkflowEmbedded .themeButton i {
+  display: flex;
+  gap: 5px;
+  font-style: normal;
+}
+
+.outfitWorkflowEmbedded .themeButton b {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.outfitWorkflowEmbedded .promptLayer {
+  place-items: center;
+}
+
+.outfitWorkflowEmbedded .promptAssistantModal {
+  width: min(820px, calc(100vw - 28px));
+  overflow: hidden;
+}
+
+.outfitWorkflowEmbedded .promptAssistantModal header {
+  height: 46px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .promptAssistantModal h2 {
+  font-size: 15px;
+}
+
+.outfitWorkflowEmbedded .promptAssistantBody {
+  display: grid;
+  gap: 14px;
+  padding: 13px 12px 18px;
+}
+
+.outfitWorkflowEmbedded .promptTabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.outfitWorkflowEmbedded .promptTab {
+  height: 28px;
+  padding: 0 11px;
+}
+
+.outfitWorkflowEmbedded .promptTab.dropTarget {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.outfitWorkflowEmbedded .promptCategoryAdd {
+  gap: 6px;
+}
+
+.outfitWorkflowEmbedded .promptSearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-strong-bg) 80%, transparent);
+}
+
+.outfitWorkflowEmbedded .promptSearch input {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.outfitWorkflowEmbedded .newPromptButton {
+  justify-self: start;
+  height: 30px;
+  padding: 0 12px;
+}
+
+.outfitWorkflowEmbedded .promptPresetGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  min-height: 72px;
+}
+
+.outfitWorkflowEmbedded .promptChip {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: 36px;
+  padding: 0 7px 0 12px;
+  border-radius: 999px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel-strong-bg) 80%, transparent);
+  border: 1px solid var(--border);
+  cursor: grab;
+}
+
+.outfitWorkflowEmbedded .promptChip.dragging {
+  opacity: 0.58;
+  border-color: var(--accent-border);
+}
+
+.outfitWorkflowEmbedded .promptChipMain,
+.outfitWorkflowEmbedded .promptChipIcon {
+  height: 100%;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.outfitWorkflowEmbedded .promptChipMain {
+  max-width: 150px;
+  overflow: hidden;
+  padding-right: 7px;
+  font-size: 13px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.outfitWorkflowEmbedded .promptChipIcon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  color: var(--text-soft);
+}
+
+.outfitWorkflowEmbedded .promptChipIcon:hover {
+  color: var(--accent);
+}
+
+.outfitWorkflowEmbedded .promptEmpty {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.outfitWorkflowEmbedded .promptPresetCard {
+  display: grid;
+  gap: 7px;
+  min-height: 116px;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--button-bg);
+}
+
+.outfitWorkflowEmbedded .promptPresetCard:hover {
+  border-color: var(--accent-border);
+  transform: translateY(-1px);
+}
+
+.outfitWorkflowEmbedded .promptPresetCard strong {
+  font-size: 14px;
+}
+
+.outfitWorkflowEmbedded .promptPresetCard span {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.outfitWorkflowEmbedded .promptEditorLayer {
+  z-index: 25;
+}
+
+.outfitWorkflowEmbedded .promptEditorModal {
+  display: grid;
+  width: min(520px, calc(100vw - 28px));
+  overflow: hidden;
+}
+
+.outfitWorkflowEmbedded .promptEditorModal header {
+  height: 48px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .promptEditorModal h2 {
+  font-size: 15px;
+}
+
+.outfitWorkflowEmbedded .promptEditorBody {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.outfitWorkflowEmbedded .editorField {
+  display: grid;
+  gap: 6px;
+}
+
+.outfitWorkflowEmbedded .editorField span {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.outfitWorkflowEmbedded .editorField input,
+.outfitWorkflowEmbedded .editorField select,
+.outfitWorkflowEmbedded .editorField textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 0 11px;
+}
+
+.outfitWorkflowEmbedded .editorField input,
+.outfitWorkflowEmbedded .editorField select {
+  height: 40px;
+}
+
+.outfitWorkflowEmbedded .editorField textarea {
+  min-height: 240px;
+  resize: vertical;
+  padding-top: 10px;
+  line-height: 1.55;
+}
+
+.outfitWorkflowEmbedded .promptEditorModal footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 14px;
+  border-top: 1px solid var(--border);
+}
+
+
+.outfitWorkflowEmbedded {
+  min-width: 0;
+  min-height: 100%;
+  overflow: visible;
+  background: transparent;
+}
+
+.outfitWorkflowEmbedded.appShell {
+  display: block;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.outfitWorkflowEmbedded > .sidebar {
+  display: none;
+}
+
+.outfitWorkflowEmbedded > .workspace {
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 6px 18px 0;
+  scrollbar-gutter: stable;
+}
+
+.outfitWorkflowEmbedded .viewPanel {
+  min-height: auto;
+}
+
+.outfitWorkflowEmbedded .viewPanel.active {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}

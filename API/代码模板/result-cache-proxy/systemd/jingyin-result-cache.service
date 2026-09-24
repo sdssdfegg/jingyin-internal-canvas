@@ -1,0 +1,19 @@
+[Unit]
+Description=Jingyin result image cache proxy
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/jingyin-result-cache
+Environment=NODE_ENV=production
+Environment=RESULT_CACHE_CONFIG=/opt/jingyin-result-cache/config.json
+EnvironmentFile=/opt/jingyin-result-cache/.env
+ExecStart=/usr/bin/node /opt/jingyin-result-cache/server.mjs
+Restart=always
+RestartSec=3
+User=www
+Group=www
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

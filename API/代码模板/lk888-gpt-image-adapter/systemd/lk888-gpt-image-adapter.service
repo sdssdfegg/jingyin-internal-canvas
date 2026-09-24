@@ -1,0 +1,20 @@
+[Unit]
+Description=Jingyin LK888 GPT Image Adapter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/jingyin-lk888-gpt-image-adapter
+Environment=PORT=8791
+Environment=HOST=127.0.0.1
+Environment=LK888_BASE_URL=https://api.lk888.ai
+Environment=LK888_MODEL=tt-image-2
+ExecStart=/usr/bin/python3 /opt/jingyin-lk888-gpt-image-adapter/server.py
+Restart=always
+RestartSec=3
+User=www
+Group=www
+
+[Install]
+WantedBy=multi-user.target
