@@ -1,0 +1,18 @@
+{
+  "note": "ESLint 棘轮基线：按「文件|规则」记条数，只用来拦新增问题。刷新方式：npm run lint:baseline",
+  "generatedAt": "2026-09-25",
+  "eslintVersion": "9.39.4",
+  "totals": {
+    "errors": 0,
+    "warnings": 26,
+    "total": 26
+  },
+  "counts": {
+    "prompts/server/outfit-skill.js|no-unused-vars": 2,
+    "server/index.js|no-unused-vars": 2,
+    "src/image-editor.jsx|react-hooks/exhaustive-deps": 1,
+    "src/main.jsx|react-hooks/exhaustive-deps": 8,
+    "src/outfit-workflow.jsx|no-unused-vars": 3,
+    "src/outfit-workflow.jsx|react-hooks/exhaustive-deps": 10
+  }
+}

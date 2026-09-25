@@ -51,6 +51,7 @@ const ORDER = [
   "routing-check",
   "ui-duplication-check",
   "quickgen-skill-check",
+  "lint-ratchet-check",
   "run-all-check",
   "check-launcher"
 ];

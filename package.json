@@ -14,6 +14,7 @@
     "build:assets": "node scripts/generate-static-assets.mjs",
     "lint": "eslint .",
     "lint:json": "eslint . --format json",
+    "lint:baseline": "node scripts/verify/lint-ratchet-check.mjs --update",
     "release:win": "node scripts/secure-win-release.mjs"
   },
   "dependencies": {
