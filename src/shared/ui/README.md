@@ -13,7 +13,14 @@
 | 参考图缩略条 | 快捷、批量、详情结果都可能用 | `ReferenceThumbTray.jsx` |
 | 顶部工具栏 | 主画板和批量页都有刷新、下载、清空、打开目录 | `TopToolbar.jsx` |
 | 状态徽标 | running/success/failed/queued 多处重复 | `TaskBadge.jsx` |
-| 弹窗底层 | 设置、预览、提示词、裁剪都用 | `Modal.jsx` |
+| 弹窗底层 | 设置、预览、提示词、裁剪都用 | **已抽：`Modal.jsx`（`Modal` + `ModalHeader`）** |
+
+## 已抽取的组件
+
+| 组件 | 覆盖范围 | 说明 |
+| --- | --- | --- |
+| `Modal.jsx` | 遮罩层 + 面板 + 点遮罩关闭 + 面板阻止冒泡；`ModalHeader` 提供标题/副标题/关闭按钮 | 2026-09-25 抽取。已接入快捷/批量两侧的**裁剪弹窗**（`QuickCropViewportModal`、`CropModal`）与**局部回贴弹窗**（`QuickLocalEditModal`、`OutfitLocalEditModal`）。只共享外壳与通用交互；裁剪几何、蒙版绘制、请求参数、保存行为仍各自保留。**刻意没有**加 Esc 关闭与 body 滚动锁——抽取前这四个弹窗都没有，加了就是改交互。其余弹窗（设置、预览、提示词等）仍各写一份，可作为后续迁移对象。 |
+
 | 局部编辑/裁剪控件 | 快捷和批量都有 | 后续放 `src/features/local-edit/`，公共底层放 `src/shared/` |
 
 ## 修改规则

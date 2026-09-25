@@ -50,6 +50,7 @@ const ORDER = [
   "error-boundary-check",
   "routing-check",
   "ui-duplication-check",
+  "modal-shell-check",
   "quickgen-skill-check",
   "lint-ratchet-check",
   "run-all-check",

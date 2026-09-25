@@ -52,6 +52,7 @@ import {
   normalizeMaskCanvas
 } from "./shared/local-edit-mask.js";
 import DebouncedTextarea from "./shared/DebouncedTextarea.jsx";
+import { Modal, ModalHeader } from "./shared/ui/Modal.jsx";
 import { DEFAULT_MODELS } from "./shared/models.js";
 import {
   canonicalModel,
@@ -4689,17 +4690,12 @@ function CropModal({
   }
 
   return (
-    <div className="modalLayer" onMouseDown={onClose}>
-      <section className="cropModal" onMouseDown={(event) => event.stopPropagation()}>
-        <header>
-          <div>
-            <h2>{title}</h2>
-            <span>{subtitle || `${item.name} · 输出 ${activeRatio}`}</span>
-          </div>
-          <button className="iconButton" type="button" onClick={onClose}>
-            <X size={18} />
-          </button>
-        </header>
+    <Modal layerClassName="modalLayer" panelClassName="cropModal" onClose={onClose}>
+      <ModalHeader
+        title={title}
+        subtitle={subtitle || `${item.name} · 输出 ${activeRatio}`}
+        onClose={onClose}
+      />
         <div className="cropModeTabs">
           {(modeOptions || [
             ["crop", "手动裁剪"],
@@ -4761,8 +4757,7 @@ function CropModal({
             </button>
           </div>
         </footer>
-      </section>
-    </div>
+    </Modal>
   );
 }
 
@@ -5239,17 +5234,17 @@ function OutfitLocalEditModal({ item, ratio, onRatioChange, onClose, onApply, on
   const applyDisabled = working || !cropRect || (isMaskMode && !maskPainted);
 
   return (
-    <div className="modalLayer previewLayer" onMouseDown={onClose}>
-      <section className="quickLocalEditModal" onMouseDown={(event) => event.stopPropagation()}>
-        <header>
-          <div>
-            <h2>局部回贴</h2>
-            <span>{originalFile?.name || "上传图片"} · 生成后贴回原图同一坐标 · {activeRatio}</span>
-          </div>
-          <button className="iconButton" type="button" onClick={onClose} aria-label="关闭">
-            <X size={18} />
-          </button>
-        </header>
+    <Modal
+      layerClassName="modalLayer previewLayer"
+      panelClassName="quickLocalEditModal"
+      onClose={onClose}
+    >
+      <ModalHeader
+        title="局部回贴"
+        subtitle={<>{originalFile?.name || "上传图片"} · 生成后贴回原图同一坐标 · {activeRatio}</>}
+        onClose={onClose}
+        closeLabel="关闭"
+      />
         <div className="quickLocalEditStage">
           <div className="quickLocalEditImageWrap">
             {imageUrl && (
@@ -5411,8 +5406,7 @@ function OutfitLocalEditModal({ item, ratio, onRatioChange, onClose, onApply, on
             </button>
           </div>
         </footer>
-      </section>
-    </div>
+    </Modal>
   );
 }
 

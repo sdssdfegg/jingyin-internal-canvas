@@ -74,6 +74,7 @@ import {
 } from "./shared/local-edit-geometry.js";
 import DebouncedTextarea from "./shared/DebouncedTextarea.jsx";
 import { ErrorBoundary } from "./shared/error-boundary.jsx";
+import { Modal, ModalHeader } from "./shared/ui/Modal.jsx";
 import { brokenImageReason, isAllowedReferenceImage, resultImageCardState } from "./shared/result-image.js";
 import { classifyGenerationError, formatGenerationError } from "./shared/generation-errors.js";
 import { fileSize, formatMs } from "./lib/format/index.js";
@@ -1981,17 +1982,17 @@ function QuickCropViewportModal({ item, ratio, onClose, onApply, onClear }) {
   }
 
   return (
-    <div className="modalLayer previewLayer" onMouseDown={onClose}>
-      <section className="quickLocalEditModal quickCropViewportModal" onMouseDown={(event) => event.stopPropagation()}>
-        <header>
-          <div>
-            <h2>普通裁剪</h2>
-            <span>{originalFile?.name || "上传图片"} · 裁剪后的参考图参与生成 · {activeRatio}</span>
-          </div>
-          <button className="iconButton" type="button" onClick={onClose} aria-label="关闭">
-            <X size={18} />
-          </button>
-        </header>
+    <Modal
+      layerClassName="modalLayer previewLayer"
+      panelClassName="quickLocalEditModal quickCropViewportModal"
+      onClose={onClose}
+    >
+      <ModalHeader
+        title="普通裁剪"
+        subtitle={<>{originalFile?.name || "上传图片"} · 裁剪后的参考图参与生成 · {activeRatio}</>}
+        onClose={onClose}
+        closeLabel="关闭"
+      />
         <div className="quickCropViewportWrap">
           <div
             className="quickCropViewportStage"
@@ -2037,8 +2038,7 @@ function QuickCropViewportModal({ item, ratio, onClose, onApply, onClear }) {
             </button>
           </div>
         </footer>
-      </section>
-    </div>
+    </Modal>
   );
 }
 
@@ -2561,17 +2561,17 @@ function QuickLocalEditModal({ item, ratio, mode = "local", onRatioChange, onClo
   const applyDisabled = working || !cropRect || (isMaskMode && !maskPainted);
 
   return (
-    <div className="modalLayer previewLayer" onMouseDown={onClose}>
-      <section className="quickLocalEditModal" onMouseDown={(event) => event.stopPropagation()}>
-        <header>
-          <div>
-            <h2>{modalTitle}</h2>
-            <span>{originalFile?.name || "上传图片"} · {modalDescription} · {activeRatio}</span>
-          </div>
-          <button className="iconButton" type="button" onClick={onClose} aria-label="关闭">
-            <X size={18} />
-          </button>
-        </header>
+    <Modal
+      layerClassName="modalLayer previewLayer"
+      panelClassName="quickLocalEditModal"
+      onClose={onClose}
+    >
+      <ModalHeader
+        title={modalTitle}
+        subtitle={<>{originalFile?.name || "上传图片"} · {modalDescription} · {activeRatio}</>}
+        onClose={onClose}
+        closeLabel="关闭"
+      />
         <div className="quickLocalEditStage">
           <div className="quickLocalEditImageWrap">
             {imageUrl && (
@@ -2741,8 +2741,7 @@ function QuickLocalEditModal({ item, ratio, mode = "local", onRatioChange, onClo
             </button>
           </div>
         </footer>
-      </section>
-    </div>
+    </Modal>
   );
 }
 
