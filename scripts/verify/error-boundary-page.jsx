@@ -261,8 +261,12 @@ export async function runWiring() {
   }
 
   // 还原到进入时的视图（切回去是尽力而为，失败也不影响结论）
+  // 注意：点完导航要等 React 更新完再读 active class —— 不等就会读到旧的 class，
+  // 这个断言在"原视图恰好就是图片编辑"时蒙对、在别的视图下必错（套件里实测踩到）。
   if (initialView) {
-    facts.restoredView = navTo(initialView) && activeNavLabel().includes(initialView);
+    const clicked = navTo(initialView);
+    if (clicked) await wait(1000);
+    facts.restoredView = clicked && activeNavLabel().includes(initialView);
   }
   return facts;
 }

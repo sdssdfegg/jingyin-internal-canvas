@@ -582,7 +582,8 @@ const DESIGN_DRAFT_UPLOAD_LABELS = {
 const DEFAULT_RESIZE_SETTINGS = {
   ratio: "3:4",
   // 2026-09-25：批量尺寸导出的「最长边」默认值由 3000 调整为 3500。
-  // 只改默认值：用户已经保存过的自定义 longEdge 由 normalizeResizeSettings 原样保留。
+  // 老存档里存着 3000 的用户（= 从没改过，存的只是当时的默认值）由
+  // normalizeResizeSettings 迁移到新默认值；真正自定义过的值原样保留。
   longEdge: 3500,
   resolution: "custom",
   fitMode: "original",
@@ -591,6 +592,9 @@ const DEFAULT_RESIZE_SETTINGS = {
   fillColor: "#ffffff",
   cropMode: "batch"
 };
+// 旧默认值：用于把"当年没改过、存的只是默认值"的存档迁到 3500。
+// 只对这一个值做迁移，其余自定义值（2000/4000/…）不动。
+const LEGACY_RESIZE_LONG_EDGE_DEFAULT = 3000;
 
 const OUTFIT_DEFAULT_PROMPT = [
   "让图1当前人物穿着图2服装，生成自然干净的电商成片。",
@@ -1781,6 +1785,12 @@ function normalizeResizeSettings(settings = {}) {
   if (!BATCH_RATIO_OPTIONS.includes(next.ratio)) next.ratio = DEFAULT_RESIZE_SETTINGS.ratio;
   if (!RESIZE_RESOLUTION_OPTIONS.some((option) => option.value === next.resolution)) {
     next.resolution = DEFAULT_RESIZE_SETTINGS.resolution;
+  }
+  // 2026-09-25：把旧默认值 3000 迁移到新默认值 3500。
+  // 旧存档里 3000 几乎都是"从没改过"（当年就是默认值），所以跟着新默认走；
+  // 用户真正改过的其它值不受影响。迁移只在读取时生效，下次保存即写回 3500。
+  if (Number.parseInt(next.longEdge, 10) === LEGACY_RESIZE_LONG_EDGE_DEFAULT) {
+    next.longEdge = DEFAULT_RESIZE_SETTINGS.longEdge;
   }
   next.longEdge = clampResizeEdge(next.longEdge);
   next.fitMode = ["original", "pad", "crop", "original-size"].includes(next.fitMode) ? next.fitMode : DEFAULT_RESIZE_SETTINGS.fitMode;
