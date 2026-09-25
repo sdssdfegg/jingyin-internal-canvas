@@ -235,6 +235,34 @@ check("老存档选了已下线渠道 → 自动收敛到合法线路",
     && routingModule.channelsForModel("tt-image-2", catalog).some((item) => item.id === legacyTt2.channelId),
   `channelId=${legacyTt2.channelId}`);
 
+// ------------------------------------------- 前端下架（只在菜单里隐藏，服务端照旧认）
+// 2.0（TT Image 2）的 ZYG 三条：前端渠道菜单不再显示，但服务端目录与校验保持不变。
+const HIDDEN_IDS = ["silent-tt2-line-05", "silent-tt2-line-06", "silent-tt2-line-07"];
+check("隐藏名单里的线路都还在服务端目录里（说明是前端隐藏，不是下架）",
+  HIDDEN_IDS.every((id) => (catalog.channels || []).some((channel) => channel.id === id)),
+  HIDDEN_IDS.join(","));
+check("隐藏名单与禁用名单是两套（hidden ≠ forbidden）",
+  HIDDEN_IDS.every((id) => routingModule.isHiddenChannelId(id) && !routingModule.isForbiddenChannelId(id)),
+  "isHidden=true / isForbidden=false");
+const tt2Visible = routingModule.channelsForModel("tt-image-2", catalog);
+check("2.0 前端菜单里完全没有 ZYG 三条",
+  !tt2Visible.some((item) => HIDDEN_IDS.includes(item.id))
+    && !tt2Visible.some((item) => /^ZYG-/.test(String(item.label || ""))),
+  JSON.stringify(tt2Visible.map((item) => item.label)));
+check("2.0 前端菜单条数正确（10 条里隐藏 3 条 → 7 条）",
+  tt2Visible.length === 7, `count=${tt2Visible.length}`);
+for (const id of HIDDEN_IDS) {
+  const params = channelModule.normalizeImageRequest({
+    model: "tt-image-2", channelId: id, prompt: "x", imageSize: "2K", aspectRatio: "3:4"
+  });
+  const result = channelModule.validateImageRouting(params);
+  check(`服务端仍然接受前端隐藏的 ${id}（与"删除"不同）`, result.ok === true, result.code);
+}
+const legacyZyg = routingModule.convergeSettingsForModel({ model: "tt-image-2", channelId: "silent-tt2-line-06" }, catalog);
+check("老存档选着被隐藏的 ZYG → 落到未隐藏的合法线路（界面与请求保持一致）",
+  !HIDDEN_IDS.includes(legacyZyg.channelId) && tt2Visible.some((item) => item.id === legacyZyg.channelId),
+  `channelId=${legacyZyg.channelId}`);
+
 // ---------------------------------------------------------------- 能力收敛
 const fakeCatalog = {
   models: catalog.models,

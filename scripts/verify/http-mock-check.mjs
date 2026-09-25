@@ -161,6 +161,22 @@ for (const [id, label] of [["silent-tt25-line-01", "XT-image2-s"], ["silent-tt25
     row ? `${row.id}/${row.label}` : tt25ChannelRows.map((channel) => channel.id).join(","));
 }
 
+// 2026-09-25：2.0 的 ZYG 三条「只在前端隐藏」——服务端目录照旧，前端菜单里不该出现
+{
+  const routingModule = await import(new URL("../../src/shared/routing.js", import.meta.url));
+  const hiddenIds = ["silent-tt2-line-05", "silent-tt2-line-06", "silent-tt2-line-07"];
+  check("服务端目录里仍然保留 ZYG 三条（说明是前端隐藏，不是下架）",
+    hiddenIds.every((id) => tt2ChannelRows.some((channel) => channel.id === id)),
+    tt2ChannelRows.map((channel) => channel.id).join(","));
+  const frontendRows = routingModule.channelsForModel("tt-image-2", routing);
+  check("前端菜单数据源里没有 ZYG 三条",
+    !frontendRows.some((channel) => hiddenIds.includes(channel.id))
+      && !frontendRows.some((channel) => /^ZYG-/.test(String(channel.label || ""))),
+    frontendRows.map((channel) => channel.label).join(","));
+  check("前端菜单剩余 7 条（2.0 服务端 10 条 - 隐藏 3 条）",
+    frontendRows.length === 7, `count=${frontendRows.length}`);
+}
+
 // ------------------------------------------------- /api/images：旧 channelId 必须被拒
 const forbiddenCases = [
   ["WD-banana pro-特价", "forbidden"],

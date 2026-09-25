@@ -44,6 +44,28 @@ export function isForbiddenChannelId(value) {
   return FORBIDDEN_CHANNEL_ID_SET.has(String(value || "").trim().toLowerCase());
 }
 
+// 前端下架（2026-09-25）：**只在前端隐藏**，服务端目录与服务端校验保持不变。
+// 与 FORBIDDEN_CHANNEL_IDS 的区别：
+//   - FORBIDDEN：旧线路，前端目录/服务端目录/服务端校验三处都要删或拒；
+//   - HIDDEN  ：线路本身照旧合法，只是不再出现在前端菜单里（渠道菜单、价格展示都走
+//               channelsForModel，所以只在这一处过滤就够）。
+// 隐藏后 channelsForModel 不再返回它们，channelForModel / convergeSettingsForModel /
+// routingFields 会自动落到该模型的第一条合法线路，避免"界面显示 A、请求实际带 B"。
+export const HIDDEN_CHANNEL_IDS = Object.freeze([
+  // 2.0（TT Image 2）的 ZYG 三条
+  "silent-tt2-line-05",
+  "silent-tt2-line-06",
+  "silent-tt2-line-07"
+]);
+
+const HIDDEN_CHANNEL_ID_SET = new Set(
+  HIDDEN_CHANNEL_IDS.map((value) => String(value).trim().toLowerCase())
+);
+
+export function isHiddenChannelId(value) {
+  return HIDDEN_CHANNEL_ID_SET.has(String(value || "").trim().toLowerCase());
+}
+
 // 香蕉 2 只允许这两条线路（Subdirect / 云枢）。
 // 香蕉 Pro 只允许这两条线路（Subdirect / Origin）。
 export const MODEL_CHANNEL_ALLOWLIST = Object.freeze({
@@ -233,6 +255,7 @@ export const FALLBACK_MODEL_CHANNELS = Object.freeze({
 /**
  * 当前模型的可用线路（含价格）。
  * - 旧线路在任何分支都不会出现。
+ * - HIDDEN_CHANNEL_IDS 里的线路只在前端隐藏（服务端仍认，见上面的说明）。
  * - 香蕉 2 / 香蕉 Pro 只允许白名单里的那两条线路。
  * - 目录不可用时回退到本地兜底表，保证请求始终能带上合法 channelId。
  */
@@ -258,11 +281,12 @@ export function channelsForModel(model, catalog = null) {
     return source
       .map((channel) => allowed.get(channel.id) || null)
       .filter(Boolean)
-      .map((channel) => ({ ...channel, price: Number(channel.price || 0) }));
+      .map((channel) => ({ ...channel, price: Number(channel.price || 0) }))
+      .filter((channel) => !isHiddenChannelId(channel.id));
   }
-  if (configured.length) return configured;
+  if (configured.length) return configured.filter((channel) => !isHiddenChannelId(channel.id));
   return (FALLBACK_MODEL_CHANNELS[canonical] || [])
-    .filter((channel) => !isForbiddenChannelId(channel.id))
+    .filter((channel) => !isForbiddenChannelId(channel.id) && !isHiddenChannelId(channel.id))
     .map((channel) => ({ ...channel, currency: "CNY" }));
 }
 
