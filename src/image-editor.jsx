@@ -1,7 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Brush,
-  Check,
   Download,
   Eraser,
   Eye,
@@ -11,7 +9,6 @@ import {
   Layers,
   Maximize2,
   MousePointer2,
-  Move,
   RefreshCw,
   RotateCcw,
   Trash2,
@@ -34,12 +31,6 @@ function clamp(value, min, max) {
 
 function fileBaseName(name) {
   return String(name || "image").replace(/\.[^.]+$/, "") || "image";
-}
-
-function imageExtension(type) {
-  if (/png/i.test(type)) return "png";
-  if (/webp/i.test(type)) return "webp";
-  return "jpg";
 }
 
 function isImageFile(file) {

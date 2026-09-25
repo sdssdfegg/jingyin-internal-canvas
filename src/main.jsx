@@ -18,18 +18,14 @@ import {
   Flame,
   Folder,
   FolderOpen,
-  History,
   Image as ImageIcon,
   ImageOff,
   KeyRound,
   Layers,
-  Library,
-  Lightbulb,
   Link2,
   Loader2,
   Maximize2,
   Minus,
-  MousePointer2,
   Move,
   Palette,
   Pencil,
@@ -79,7 +75,7 @@ import {
 import DebouncedTextarea from "./shared/DebouncedTextarea.jsx";
 import { ErrorBoundary } from "./shared/error-boundary.jsx";
 import { brokenImageReason, isAllowedReferenceImage, resultImageCardState } from "./shared/result-image.js";
-import { classifyGenerationError, describeEmptyResult, formatGenerationError } from "./shared/generation-errors.js";
+import { classifyGenerationError, formatGenerationError } from "./shared/generation-errors.js";
 import { fileSize, formatMs } from "./lib/format/index.js";
 import { readJsonStorage, removeStorageItem, writeJsonStorage } from "./lib/storage/json-storage.js";
 import OutfitWorkflow from "./outfit-workflow.jsx";
@@ -94,7 +90,6 @@ import {
 } from "./api/save.js";
 import {
   appendHistoryResults,
-  clearHistoryResultsOnServer,
   deleteHistoryResults,
   getHistoryResults
 } from "./api/history.js";
@@ -958,30 +953,6 @@ async function removeHistoryResults(ids) {
   }
 }
 
-async function clearHistoryResults() {
-  try {
-    await clearHistoryResultsOnServer();
-    return;
-  } catch {
-    // Fall back to browser storage below.
-  }
-
-  try {
-    const db = await openHistoryDb();
-    if (!db) {
-      removeStorageItem(HISTORY_FALLBACK_KEY);
-      return;
-    }
-
-    const transaction = db.transaction(HISTORY_STORE_NAME, "readwrite");
-    transaction.objectStore(HISTORY_STORE_NAME).clear();
-    await waitForTransaction(transaction);
-    db.close();
-  } catch {
-    removeStorageItem(HISTORY_FALLBACK_KEY);
-  }
-}
-
 function clampCount(value) {
   return Math.max(1, Math.min(12, Number.parseInt(value, 10) || 1));
 }
@@ -1139,10 +1110,6 @@ function quickReferenceHasLocalEdit(item) {
   return Boolean(item?.localEdit?.cropFile && item?.localEdit?.cropRect);
 }
 
-function quickReferenceHasCropEdit(item) {
-  return Boolean(item?.cropEdit?.cropFile && item?.cropEdit?.cropRect);
-}
-
 function quickReferenceUploadFiles(items) {
   return (items || []).map(quickReferenceUploadFile).filter((file) => file instanceof File);
 }
@@ -1152,23 +1119,6 @@ function quickReferenceRunUploadFile(item, localEditItem = null) {
     return item?.localEdit?.cropFile || quickReferenceUploadFile(item);
   }
   return item?.cropEdit?.cropFile || quickReferenceOriginalFile(item);
-}
-
-function referenceMetaFromQuickItems(items, role = "reference", startIndex = 0) {
-  return (items || []).map((item, index) => {
-    const file = quickReferenceUploadFile(item);
-    const originalFile = quickReferenceOriginalFile(item);
-    return {
-      name: file?.name || originalFile?.name || `reference-${startIndex + index + 1}`,
-      role,
-      index: startIndex + index,
-      size: file?.size || 0,
-      type: file?.type || "",
-      lastModified: file?.lastModified || originalFile?.lastModified || 0,
-      cropEdit: quickReferenceHasCropEdit(item),
-      localEdit: quickReferenceHasLocalEdit(item)
-    };
-  });
 }
 
 function referenceMetaFromQuickRunItems(items, localEditItem = null, role = "reference", startIndex = 0) {
@@ -1413,20 +1363,6 @@ function canvasToBlob(canvas, type, quality) {
       else reject(new Error("图片压缩失败"));
     }, type, quality);
   });
-}
-
-async function canvasToHighQualityJpegBlob(canvas, options = {}) {
-  const qualities = Array.isArray(options.qualities) && options.qualities.length
-    ? options.qualities
-    : LOCAL_EDIT_OUTPUT_JPEG_QUALITIES;
-  const targetBytes = Math.max(1, Number(options.targetBytes || LOCAL_EDIT_OUTPUT_TARGET_BYTES));
-  let best = null;
-  for (const quality of qualities) {
-    const blob = await canvasToBlob(canvas, "image/jpeg", quality);
-    best = { blob, quality };
-    if (blob.size <= targetBytes) return best;
-  }
-  return best;
 }
 
 async function imageBitmapFromFile(file) {
@@ -2103,35 +2039,6 @@ function QuickCropViewportModal({ item, ratio, onClose, onApply, onClear }) {
         </footer>
       </section>
     </div>
-  );
-}
-
-function QuickLocalEditThumbOverlay({ localEdit }) {
-  const sourceWidth = Number(localEdit?.sourceWidth || 0);
-  const sourceHeight = Number(localEdit?.sourceHeight || 0);
-  const rect = localEdit?.cropRect;
-  if (!sourceWidth || !sourceHeight || !rect) return null;
-  const isMaskEdit = localEdit?.editMode === LOCAL_EDIT_MASK_MODE && localEdit?.maskDataUrl;
-  return (
-    <>
-      {isMaskEdit && (
-        <img className="thumbLocalMaskOverlay" src={localEdit.maskDataUrl} alt="" draggable={false} />
-      )}
-      <svg
-        className={`thumbLocalEditOverlay ${isMaskEdit ? "mask" : "rect"}`}
-        viewBox={`0 0 ${sourceWidth} ${sourceHeight}`}
-        preserveAspectRatio="xMidYMid meet"
-        aria-hidden="true"
-      >
-        <rect
-          x={rect.x}
-          y={rect.y}
-          width={rect.width}
-          height={rect.height}
-          rx={Math.max(8, Math.min(sourceWidth, sourceHeight) * 0.008)}
-        />
-      </svg>
-    </>
   );
 }
 
@@ -2895,7 +2802,7 @@ function App() {
   const [downloadFeedbackIds, setDownloadFeedbackIds] = useState(() => new Set());
   const [error, setError] = useState("");
   const [isQuickPromptOptimizing, setIsQuickPromptOptimizing] = useState(false);
-  const [timing, setTiming] = useState(null);
+  const [, setTiming] = useState(null);
   const [events, setEvents] = useState([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
@@ -5164,7 +5071,7 @@ function App() {
     }
   }
 
-  async function downloadItem(item, index = 0) {
+  async function downloadItem(item, _index = 0) {
     try {
       const directory = saveDirectory || await refreshSaveDirectory();
       const response = await fetch("/api/save-image", {
@@ -5691,24 +5598,6 @@ function App() {
     if (!drag.moved) closePreview();
   }
 
-  async function addResultToReferences(item) {
-    if (files.length >= quickMaxReferenceFiles) {
-      addEvent("参考图", `最多保留 ${quickMaxReferenceFiles} 张参考图`);
-      return;
-    }
-    try {
-      const blob = await blobFromImageItem(item);
-      const file = new File([blob], `result-${Date.now()}.${imageExtension(blob.type)}`, {
-        type: blob.type || "image/png"
-      });
-      appendReferenceFiles([file]);
-      addEvent("参考图", "已添加到参考图");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      addEvent("参考图失败", message);
-    }
-  }
-
   async function sendResultToImageEditor(item, slot = "base") {
     try {
       const blob = await blobFromImageItem(item);
@@ -5817,11 +5706,6 @@ function App() {
     const prompt = item.prompt || settings.prompt;
     setSettings((current) => ({ ...current, prompt, n: count }));
     void generate({ prompt, n: count, replaceResultId: item.id });
-  }
-
-  function pushPromptToInput(item) {
-    updateSetting("prompt", item.prompt || "");
-    addEvent("输入框", "提示词已推送");
   }
 
   function markDeferredFeature(label) {
@@ -6209,9 +6093,6 @@ function App() {
     const wholeOutfitIntent = !localEditForRun
       && runItems.length >= 2
       && classifyQuickPrimaryLocalIntent(runSettings.prompt) === "outfit";
-    const banana2LocalOutfit = isBanana2Model(runSettings.model)
-      && primaryLocalEdit
-      && quickPrimaryLocalIntent === "outfit";
     const localAppearanceIntent = primaryLocalEdit && quickPrimaryLocalIntent === "appearance";
     // 2026-09-25 对齐 3.0：删除了 shouldUseExactBanana2LocalCrop 的"香蕉2 再精确重裁一次"分支。
     // 它存在的理由是当时只有香蕉2 用精确选框、其它模型用 contextRect 大图；

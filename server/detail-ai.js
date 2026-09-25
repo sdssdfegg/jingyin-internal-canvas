@@ -1,7 +1,6 @@
 import {
   BASE_SKILL,
   INDUSTRY_SKILLS,
-  PLATFORM_SKILLS,
   QUALITY_SKILL,
   SCREEN_MODULES,
   getIndustrySkillByText,
@@ -19,17 +18,6 @@ function clamp(value, min, max, fallback) {
 function asText(value, fallback = "") {
   const text = String(value ?? "").trim();
   return text || fallback;
-}
-
-function asArray(value) {
-  if (Array.isArray(value)) return value.map((item) => asText(item)).filter(Boolean);
-  if (typeof value === "string") {
-    return value
-      .split(/\r?\n|[，,；;]/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-  return [];
 }
 
 function createAbortSignal(timeoutMs) {

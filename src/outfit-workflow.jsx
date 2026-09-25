@@ -1,10 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   Brush,
   Check,
   CheckSquare,
-  Copy,
   Crop,
   Download,
   Eye,
@@ -1356,22 +1355,6 @@ function makePoseRemixPage(baseSettings = readSettings(), patch = {}) {
   });
 }
 
-function makeLocalDetailPage(baseSettings = readSettings(), patch = {}) {
-  return makeOutfitPage(DEFAULT_LOCAL_DETAIL_PAGE_NAME, {
-    deleteLocked: true,
-    ...patch,
-    settings: {
-      ...baseSettings,
-      prompt: LOCAL_DETAIL_DEFAULT_PROMPT,
-      productNote: "",
-      smartIntervention: false,
-      ...(patch.settings || {})
-    },
-    uploadLabels: patch.uploadLabels || LOCAL_DETAIL_UPLOAD_LABELS,
-    allowEmptyPrompt: true
-  });
-}
-
 function makeBackgroundChangePage(baseSettings = readSettings(), patch = {}) {
   return makeOutfitPage(DEFAULT_BACKGROUND_CHANGE_PAGE_NAME, {
     deleteLocked: true,
@@ -1401,23 +1384,6 @@ function makeRandomBackgroundPage(baseSettings = readSettings(), patch = {}) {
       ...(patch.settings || {})
     },
     uploadLabels: patch.uploadLabels || RANDOM_BACKGROUND_UPLOAD_LABELS
-  });
-}
-
-function makeOutpaintPage(baseSettings = readSettings(), patch = {}) {
-  return makeOutfitPage(DEFAULT_OUTPAINT_PAGE_NAME, {
-    deleteLocked: true,
-    ...patch,
-    settings: {
-      ...baseSettings,
-      prompt: OUTPAINT_DEFAULT_PROMPT,
-      productNote: "",
-      smartIntervention: false,
-      pairingMode: "fixed",
-      aspectRatio: "9:16",
-      ...(patch.settings || {})
-    },
-    uploadLabels: patch.uploadLabels || OUTPAINT_UPLOAD_LABELS
   });
 }
 
@@ -1692,16 +1658,6 @@ function themeToVars(theme) {
   return palette[normalizeTheme(theme)] || palette.dark;
 }
 
-function buildPromptPresetMap() {
-  const map = new Map();
-  for (const group of PROMPT_PRESET_GROUPS) {
-    for (const preset of group.presets) {
-      map.set(preset.title, preset.content);
-    }
-  }
-  return map;
-}
-
 function openOutfitLocalDb() {
   if (typeof window === "undefined" || !window.indexedDB) return Promise.resolve(null);
   return new Promise((resolve) => {
@@ -1752,35 +1708,6 @@ async function outfitLocalSet(key, value) {
       const transaction = db.transaction(OUTFIT_LOCAL_STORE, "readwrite");
       const store = transaction.objectStore(OUTFIT_LOCAL_STORE);
       store.put({ key, value, updatedAt: Date.now() });
-      transaction.oncomplete = () => {
-        db.close();
-        resolve(true);
-      };
-      transaction.onerror = () => {
-        db.close();
-        resolve(false);
-      };
-      transaction.onabort = () => {
-        db.close();
-        resolve(false);
-      };
-    } catch {
-      try {
-        db.close();
-      } catch {}
-      resolve(false);
-    }
-  });
-}
-
-async function outfitLocalDelete(key) {
-  const db = await openOutfitLocalDb();
-  if (!db) return false;
-  return new Promise((resolve) => {
-    try {
-      const transaction = db.transaction(OUTFIT_LOCAL_STORE, "readwrite");
-      const store = transaction.objectStore(OUTFIT_LOCAL_STORE);
-      store.delete(key);
       transaction.oncomplete = () => {
         db.close();
         resolve(true);
@@ -2767,13 +2694,6 @@ function preprocessModeLabel(mode) {
   return PREPROCESS_OPTIONS.find((option) => option.value === mode)?.label
     || PREPROCESS_OPTIONS.find((option) => option.value === DEFAULT_PREPROCESS_MODE)?.label
     || "白底补边";
-}
-
-function preprocessModeMark(mode) {
-  if (mode === "crop") return "裁";
-  if (mode === "soft") return "柔";
-  if (mode === "original") return "原";
-  return "白";
 }
 
 function groupPreprocessValue(items, fallbackMode) {
@@ -4456,11 +4376,6 @@ function UploadZone({
     setDropTarget(null);
   }
 
-  function openCrop(item) {
-    if (suppressOpenRef.current) return;
-    onOpenCrop(item);
-  }
-
   function openLocalEdit(item) {
     if (suppressOpenRef.current) return;
     onOpenLocalEdit?.(item);
@@ -4633,35 +4548,6 @@ function UploadZone({
         }}
       />
     </section>
-  );
-}
-
-function OutfitLocalEditThumbOverlay({ localEdit }) {
-  const sourceWidth = Number(localEdit?.sourceWidth || 0);
-  const sourceHeight = Number(localEdit?.sourceHeight || 0);
-  const rect = localEdit?.cropRect;
-  if (!sourceWidth || !sourceHeight || !rect) return null;
-  const isMaskEdit = localEdit?.editMode === LOCAL_EDIT_MASK_MODE && localEdit?.maskDataUrl;
-  return (
-    <>
-      {isMaskEdit && (
-        <img className="thumbLocalMaskOverlay" src={localEdit.maskDataUrl} alt="" draggable={false} />
-      )}
-      <svg
-        className={`thumbLocalEditOverlay ${isMaskEdit ? "mask" : "rect"}`}
-        viewBox={`0 0 ${sourceWidth} ${sourceHeight}`}
-        preserveAspectRatio="xMidYMid meet"
-        aria-hidden="true"
-      >
-        <rect
-          x={rect.x}
-          y={rect.y}
-          width={rect.width}
-          height={rect.height}
-          rx={Math.max(8, Math.min(sourceWidth, sourceHeight) * 0.008)}
-        />
-      </svg>
-    </>
   );
 }
 
@@ -6908,7 +6794,7 @@ export default function OutfitWorkflow({
   const [masterFitPromptOpen, setMasterFitPromptOpen] = useState(false);
   const [masterFitPromptDraft, setMasterFitPromptDraft] = useState("");
   const [inlineMessage, setInlineMessage] = useState("");
-  const [events, setEvents] = useState([]);
+  const [, setEvents] = useState([]);
   const [clockNow, setClockNow] = useState(Date.now());
   const [cropTarget, setCropTarget] = useState(null);
   const [localEditTarget, setLocalEditTarget] = useState(null);
@@ -8903,10 +8789,6 @@ export default function OutfitWorkflow({
     setResultReplaceTargetId("");
   }
 
-  function taskHasLocalEditResult(task) {
-    return Boolean(task?.localEdit?.cropFile || task?.result?.localEdit?.enabled);
-  }
-
   function canRerunTask(task) {
     return Boolean(
       imageItemUploadFile(task?.modelItem)
@@ -9825,14 +9707,6 @@ function buildTasks(countOverride = plannedGenerationCount) {
     if (preview?.id === latestTarget.id) setPreview(nextTarget);
     clearResultDragState();
     addEvent("结果覆盖", `已用 #${sourceTask.order || ""} 覆盖 #${latestTarget.order || ""}，原位置已移除`);
-  }
-
-  function scrollWorkspaceToTop() {
-    workspaceRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function scrollToSection(id) {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function switchView(view) {

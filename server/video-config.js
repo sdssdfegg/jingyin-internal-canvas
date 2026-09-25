@@ -112,7 +112,7 @@ export const VIDEO_MODELS = Object.freeze([
   }
 ]);
 
-function customerPricePerSecond(model) {
+function customerPricePerSecond(_model) {
   return {};
 }
 

@@ -5,7 +5,6 @@ import {
   CHANNEL_MODELS,
   FORBIDDEN_CHANNEL_IDS,
   isForbiddenChannelId,
-  normalizeBaseUrl,
   routingChannelForModel,
   routingModelCapabilities,
   routingModelFor,

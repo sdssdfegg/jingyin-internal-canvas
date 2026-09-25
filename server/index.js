@@ -31,9 +31,7 @@ import {
   publicChannelModels,
   publicChannelPolicyConfig,
   upstreamModelForChannel,
-  publicRoutingCatalog,
-  routingModelFor,
-  routingChannelForModel
+  publicRoutingCatalog
 } from "./channel-config.js";
 import {
   JINGYIN_VIDEO_GATEWAY_CHANNEL_ID,
@@ -1457,13 +1455,6 @@ async function itemWithArchivedImage(item) {
   };
 }
 
-async function archiveHistoryItems(items) {
-  const incoming = Array.isArray(items) ? items.filter((item) => item?.id) : [];
-  if (incoming.length > 0) {
-    await appendHistoryResults(incoming);
-  }
-}
-
 function autoSaveModuleFolder(source) {
   if (source === "detail-main") return "一键详情主图";
   if (source === "reference-remix") return "参考生图";
@@ -1630,11 +1621,6 @@ async function persistGeneratedItems(items) {
   return { items: persistedItems, autoSavedCount };
 }
 
-async function cacheGeneratedItemsForDisplay(items) {
-  const incoming = Array.isArray(items) ? items.filter((item) => item?.id) : [];
-  return Promise.all(incoming.map((item) => archiveIncomingHistoryItem(item, RESULT_DISPLAY_CACHE_TIMEOUT_MS)));
-}
-
 function persistGeneratedItemsInBackground(items, requestId, stage = "background-persist-generated-items") {
   const incoming = Array.isArray(items) ? items.filter((item) => item?.id) : [];
   if (incoming.length === 0) return;
@@ -1658,11 +1644,6 @@ function persistGeneratedItemsInBackground(items, requestId, stage = "background
         error: error instanceof Error ? error.message : String(error)
       }));
   }, 0);
-}
-
-function buildSaveFilename(_item, mimeType, sourceUrl) {
-  const ext = imageExtensionFromType(mimeType, sourceUrl);
-  return `JY.${ext}`;
 }
 
 async function openDirectory(directory) {
@@ -2132,7 +2113,7 @@ function quotaFailureMessage(message) {
   return "余额不足，请充值后重新生成。";
 }
 
-function imageFailureMessage(status, upstreamMessage, params, attempts) {
+function imageFailureMessage(status, upstreamMessage, params, _attempts) {
   const message = compactLogMessage(upstreamMessage || `HTTP ${status}`, 600);
   if (isImageAuthError(status, message)) return "API Key 无效，请检查 KEY 后重新生成。";
   if (isImageQuotaError(status, message)) return quotaFailureMessage(message);
@@ -4729,7 +4710,6 @@ app.post("/api/generate-outfit", wrapOutfitUpload(imageForwardUpload.fields([
 
     baseLoop:
     for (const [baseIndex, candidate] of imageCandidates.entries()) {
-      const baseUrl = candidate.baseUrl;
       const channelLog = imageChannelLogForCandidate(candidate, baseIndex, imageCandidates.length);
       const channelApiKey = imageApiKeyForCandidate(candidate, apiKey);
       const usesPrivateChannelKey = Boolean((candidate.usesSignedRoute && candidate.hasCredential) || (channelApiKey && channelApiKey !== apiKey));
@@ -5366,7 +5346,6 @@ app.post("/api/images", wrapOutfitUpload(imageForwardUpload.array("image", IMAGE
 
     baseLoop:
     for (const [baseIndex, candidate] of imageCandidates.entries()) {
-      const baseUrl = candidate.baseUrl;
       const channelLog = imageChannelLogForCandidate(candidate, baseIndex, imageCandidates.length);
       const channelApiKey = imageApiKeyForCandidate(candidate, apiKey);
       const usesPrivateChannelKey = Boolean((candidate.usesSignedRoute && candidate.hasCredential) || (channelApiKey && channelApiKey !== apiKey));
