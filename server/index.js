@@ -4664,6 +4664,14 @@ app.post("/api/generate-outfit", wrapOutfitUpload(imageForwardUpload.fields([
     params.maskFile = maskFile;
   }
   const promptLog = imagePromptLogFields(params, promptPayload);
+  // 注意（2026-09-25 审查）：这个信号前端确实在发（src/outfit-workflow.jsx 的
+  // `deferAutoSave: Boolean(localEdit || taskIsOutpaint)`），但**这里算完没人用**。
+  // V3 基线里同名字段（deferOutfitArchive）是拿来跳过服务端归档的；V11 架构变了：
+  // 批量接口压根没有"写历史"这一步（persistGeneratedItemsInBackground 只被 /api/images 调用），
+  // 服务端只做 HZ- 显示缓存，而 UI 依赖这个本地地址显示结果——照搬"跳过归档"会踩到显示契约。
+  // 所以**先保留、不改保存时机**，等产品确认批量局部回贴/扩图到底要不要省掉这次归档。
+  // 现状已被 scripts/verify/outfit-defer-autosave-check.mjs 钉住，改行为必须先让它红。
+  // 这里**故意不加 `void`**：让 ESLint 继续报它未使用，等于把"这个问题还没定"留在门禁视野里。
   const deferOutfitAutoSave = Boolean(payload.deferAutoSave || payload.localEdit?.enabled);
   const uploadBytes = files.reduce((sum, file) => sum + file.size, 0) + (maskFile?.size || 0);
   const baseCandidates = imageChannelBaseCandidates(params.model);

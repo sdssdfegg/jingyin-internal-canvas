@@ -43,6 +43,7 @@ const ORDER = [
   "connection-test-check",
   "http-mock-check",
   "generation-failure-path-check",
+  "outfit-defer-autosave-check",
   "pro-wire-check",
   "error-boundary-check",
   "routing-check",
