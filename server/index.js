@@ -9,6 +9,9 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, gzipSync } from "node:zlib";
+// 图片地址判定与前端共用同一份（发布时 esbuild 会把 src/shared 内联进 server bundle）。
+// 注意：这只管"图片回传"；生图 API 仍然只允许官方中转，见 PRIMARY_CHANNEL_API_BASE_URL。
+import { isSafeRemoteImageUrl } from "../src/shared/image-hosts.js";
 import {
   CHANNEL_MODELS,
   buildImageRequestVariants,
@@ -2189,31 +2192,24 @@ function isSmartOutfitInterventionEnabled(value) {
 }
 
 /**
- * 图片代理允许的主机白名单（与前端 src/shared/image-hosts.js 同一条规则）。
+ * 图片下载/代理允许的目标主机。
  *
- * 前端已经会拦掉非白名单地址（不发请求）；服务端再加一道，保证即使有遗漏的调用点，
- * 也**不会真的把请求发到已退役的旧中转站/预签名临时链接上**（P1 实测那 3 个 502 就是这条路径）。
- * 主机来源是渠道配置本身，不额外硬编码，避免两处漂移。
+ * 2026-09-25 修订（按产品口径）：**生图 API 仍然只允许官方中转**（那是
+ * PRIMARY_CHANNEL_API_BASE_URL 管的，见图片转发路径），但**图片回传不限域名**——
+ * 官方中转后面挂着 N 个渠道，每个渠道的成图在各自的 CDN 上
+ * （实测：leo.yunshuaiapi.com、tos.lingkeai.vip、api.luckfill.com…）。
+ * 之前这里拿"渠道 API 主机"当图片白名单，导致这些真实结果图被判 blocked_image_host、
+ * 显示缓存失败、前端只能拿到无法加载的原始地址（表现为"图片下载失败 HTTP 403"）。
+ *
+ * 现在这里只挡两件事：非 https、以及本地/内网主机（SSRF）。
+ * 判定与前端共用同一份实现（src/shared/image-hosts.js），发布时由 esbuild 内联进 bundle。
  */
-const ALLOWED_IMAGE_PROXY_HOSTS = new Set((() => {
-  const hosts = new Set();
-  try {
-    const base = new URL(PRIMARY_CHANNEL_API_BASE_URL);
-    if (base.hostname) hosts.add(base.hostname.toLowerCase());
-  } catch { /* 配置异常时不放行任何远程主机 */ }
-  return hosts;
-})());
-
-function isAllowedImageProxyHost(host) {
-  return ALLOWED_IMAGE_PROXY_HOSTS.has(String(host || "").toLowerCase());
-}
-
 function parseProxyTarget(rawUrl) {
   const target = new URL(String(rawUrl || ""));
   if (!["http:", "https:"].includes(target.protocol)) {
     throw new Error("unsupported_protocol");
   }
-  if (!isAllowedImageProxyHost(target.hostname)) {
+  if (!isSafeRemoteImageUrl(target.toString())) {
     throw new Error("blocked_image_host");
   }
   return target;

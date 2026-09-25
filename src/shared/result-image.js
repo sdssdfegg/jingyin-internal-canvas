@@ -19,9 +19,10 @@ export const RESULT_IMAGE_MISSING_REASONS = Object.freeze({
   remote_expired: "远程原图链接已失效：结果图只在渠道服务器上存过临时链接，链接过期后无法再取回。",
   load_failed: "图片加载失败：归档文件可能已被移动或删除，远程链接也可能已经过期。",
   reference_missing: "参考图缩略图已丢失：不影响已生成的结果图，只是看不到当时的参考图。",
-  // 统一地址校验（只允许本地 /api、data:/blob: 与官方中转站主机）
-  [IMAGE_SOURCE_REASONS.BLOCKED_HOST]: "原图地址不属于允许的来源（只允许本地归档与官方中转站），已停止加载。",
-  [IMAGE_SOURCE_REASONS.BLOCKED_SCHEME]: "原图地址的协议不被允许（只允许本地归档与 https 官方中转站），已停止加载。",
+  // 统一地址校验（允许本地 /api、data:/blob: 与**任意 https 公网图床**；
+  // 只挡非 https 与本地/内网地址——渠道成图在各自 CDN 上，不能按域名拦）
+  [IMAGE_SOURCE_REASONS.BLOCKED_HOST]: "原图地址指向本机或内网，出于安全已停止加载。",
+  [IMAGE_SOURCE_REASONS.BLOCKED_SCHEME]: "原图地址的协议不被允许（只允许 https，或本地归档），已停止加载。",
   [IMAGE_SOURCE_REASONS.BLOCKED_PROXY_TARGET]: "原图代理地址里的目标地址不合法，已停止加载。",
   [IMAGE_SOURCE_REASONS.NO_SOURCE]: "这条记录没有可用的图片地址。"
 });

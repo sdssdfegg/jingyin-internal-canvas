@@ -20,10 +20,10 @@ import { freshSandbox, removeTreeSync } from "./lib/sandbox.mjs";
 import path from "node:path";
 import process from "node:process";
 import {
-  ALLOWED_IMAGE_HOSTS,
   IMAGE_SOURCE_REASONS,
   classifyImageSource,
-  isAllowedImageHost,
+  isPrivateOrLocalHost,
+  isSafeRemoteImageUrl,
   unwrapImageProxyUrl
 } from "../../src/shared/image-hosts.js";
 
@@ -41,7 +41,24 @@ function check(name, pass, detail = "") {
   results.push({ name, pass: Boolean(pass), detail: String(detail) });
 }
 
+function tinyPng(name) {
+  const bytes = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64"
+  );
+  return new File([bytes], name, { type: "image/png" });
+}
+
 // ---------- A. 规则表 ----------
+// 政策（2026-09-25 修订）：生图 API 锁死官方中转；**图片回传不限域名**
+// （中转后面挂 N 个渠道，各渠道成图在各自 CDN），只挡"非 https"与"本地/内网主机"。
+// 下面两个 CDN 是线上实测出现过的真实结果图地址——它们曾因旧白名单被判 blocked_image_host，
+// 导致"上游生成成功但前端拿不到图"（图片下载失败 HTTP 403）。这两条就是那个故障的回归用例。
+const REAL_CDN_URLS = [
+  "https://leo.yunshuaiapi.com/generated/2026/09/25/3205a025-68ff-4039-aae4-74b833668d53.png",
+  "https://tos.lingkeai.vip/uploads/2026.09/26/20260926063927_18d8b174e102c28c423e.png"
+];
+
 const ALLOW_CASES = [
   ["相对历史图", "/api/history-image/x.png"],
   ["相对结果图", "/api/result/x.png"],
@@ -49,6 +66,10 @@ const ALLOW_CASES = [
   ["data URL", "data:image/png;base64,AAAA"],
   ["blob URL", "blob:http://127.0.0.1:8787/abc"],
   ["官方中转站 https", "https://api.jingyin.online/v1/images/generated/a.png"],
+  ["任意 https 公网图床", "https://cdn.example.com/any/public.png"],
+  ["真实渠道 CDN：leo.yunshuaiapi.com", REAL_CDN_URLS[0]],
+  ["真实渠道 CDN：tos.lingkeai.vip", REAL_CDN_URLS[1]],
+  ["代理包装真实渠道 CDN", `/api/image-proxy?url=${encodeURIComponent(REAL_CDN_URLS[0])}`],
   ["代理包装官方中转站", `/api/image-proxy?url=${encodeURIComponent("https://api.jingyin.online/v1/images/generated/a.png")}`],
   ["代理包装官方中转站(带查询串)", `/api/image-proxy?url=${encodeURIComponent("https://api.jingyin.online/v1/images/generated/a.png?x=1&y=2")}`]
 ];
@@ -58,14 +79,23 @@ for (const [label, value] of ALLOW_CASES) {
 }
 
 const BLOCK_CASES = [
-  ["旧中转站 luckfill（直接）", "http://api.luckfill.com/v1/images/generated/a.png", IMAGE_SOURCE_REASONS.BLOCKED_SCHEME],
-  ["旧中转站 luckfill（https）", "https://api.luckfill.com/v1/images/generated/a.png", IMAGE_SOURCE_REASONS.BLOCKED_HOST],
-  ["预签名 S3 临时链接", "https://pre-signed-firefly-prod.s3-accelerate.amazonaws.com/x.png", IMAGE_SOURCE_REASONS.BLOCKED_HOST],
-  ["任意第三方域名", "https://example.com/x.png", IMAGE_SOURCE_REASONS.BLOCKED_HOST],
+  ["旧中转站 luckfill（http，非 https）", "http://api.luckfill.com/v1/images/generated/a.png", IMAGE_SOURCE_REASONS.BLOCKED_SCHEME],
+  ["预签名 S3 但用 http", "http://pre-signed-firefly-prod.s3-accelerate.amazonaws.com/x.png", IMAGE_SOURCE_REASONS.BLOCKED_SCHEME],
   ["scheme 相对地址", "//evil.example.com/x.png", IMAGE_SOURCE_REASONS.BLOCKED_SCHEME],
   ["javascript:", "javascript:alert(1)", IMAGE_SOURCE_REASONS.BLOCKED_SCHEME],
   ["file:", "file:///C:/x.png", IMAGE_SOURCE_REASONS.BLOCKED_SCHEME],
-  ["空地址", "", IMAGE_SOURCE_REASONS.NO_SOURCE]
+  ["空地址", "", IMAGE_SOURCE_REASONS.NO_SOURCE],
+  // 本地 / 内网：一律拦（防 SSRF）；与"图片不限域名"不冲突
+  ["localhost", "https://localhost/x.png", IMAGE_SOURCE_REASONS.BLOCKED_HOST],
+  ["127.0.0.1", "https://127.0.0.1/x.png", IMAGE_SOURCE_REASONS.BLOCKED_HOST],
+  ["10.x 内网", "https://10.0.0.5/x.png", IMAGE_SOURCE_REASONS.BLOCKED_HOST],
+  ["192.168.x 内网", "https://192.168.1.10/x.png", IMAGE_SOURCE_REASONS.BLOCKED_HOST],
+  ["172.16-31 内网", "https://172.16.5.5/x.png", IMAGE_SOURCE_REASONS.BLOCKED_HOST],
+  ["云元数据 169.254", "https://169.254.169.254/latest/meta-data/", IMAGE_SOURCE_REASONS.BLOCKED_HOST],
+  ["无点内网短名", "https://intranet/x.png", IMAGE_SOURCE_REASONS.BLOCKED_HOST],
+  [".local 局域网名", "https://printer.local/x.png", IMAGE_SOURCE_REASONS.BLOCKED_HOST],
+  ["IPv6 环回", "https://[::1]/x.png", IMAGE_SOURCE_REASONS.BLOCKED_HOST],
+  ["带凭据的地址", "https://user:pass@cdn.example.com/x.png", IMAGE_SOURCE_REASONS.BLOCKED_HOST]
 ];
 for (const [label, value, expectedReason] of BLOCK_CASES) {
   const verdict = classifyImageSource(value);
@@ -74,37 +104,61 @@ for (const [label, value, expectedReason] of BLOCK_CASES) {
     `${verdict.kind} / ${verdict.reason}（期望 ${expectedReason}）`);
 }
 
-// 关键：代理包装的旧域名必须被拒绝（P1 实测的 3 个 502 就是这条路径）
+// 关键：代理包装必须解开后再判定——内网目标同样要被拦（旧规则的 502 就是从这条路径漏过去的）
 {
-  const proxied = `/api/image-proxy?url=${encodeURIComponent("http://api.luckfill.com/v1/images/generated/a.png")}`;
-  const verdict = classifyImageSource(proxied);
-  check("拒绝：代理包装的旧域名（解代理后判定）",
+  const proxiedPrivate = `/api/image-proxy?url=${encodeURIComponent("http://127.0.0.1:8804/v1/images/generated/a.png")}`;
+  const verdict = classifyImageSource(proxiedPrivate);
+  check("拒绝：代理包装的内网目标（http → 先按协议拦）",
     verdict.allowed === false && verdict.reason === IMAGE_SOURCE_REASONS.BLOCKED_SCHEME,
     `${verdict.kind} / ${verdict.reason}`);
-  const proxiedHttps = `/api/image-proxy?url=${encodeURIComponent("https://api.luckfill.com/v1/images/generated/a.png")}`;
-  check("拒绝：代理包装的旧域名（https 版本）",
-    classifyImageSource(proxiedHttps).allowed === false,
-    JSON.stringify(classifyImageSource(proxiedHttps)));
+  const proxiedPrivateHttps = `/api/image-proxy?url=${encodeURIComponent("https://192.168.1.10/x.png")}`;
+  const verdictHttps = classifyImageSource(proxiedPrivateHttps);
+  check("拒绝：代理包装的内网目标（https → 按内网主机拦）",
+    verdictHttps.allowed === false && verdictHttps.reason === IMAGE_SOURCE_REASONS.BLOCKED_HOST,
+    `${verdictHttps.kind} / ${verdictHttps.reason}`);
   check("unwrapImageProxyUrl 能取出被代理地址",
-    unwrapImageProxyUrl(proxied) === "http://api.luckfill.com/v1/images/generated/a.png",
-    unwrapImageProxyUrl(proxied));
+    unwrapImageProxyUrl(proxiedPrivate) === "http://127.0.0.1:8804/v1/images/generated/a.png",
+    unwrapImageProxyUrl(proxiedPrivate));
   check("unwrapImageProxyUrl 对非代理地址返回空",
     unwrapImageProxyUrl("/api/history-image/x.png") === "",
     "应为空");
 }
 
-check("isAllowedImageHost 大小写不敏感",
-  isAllowedImageHost("API.Jingyin.Online") === true && isAllowedImageHost("api.luckfill.com") === false,
-  "大小写与拒绝都正确");
+check("isPrivateOrLocalHost：本地/内网判定（前后端共用）",
+  isPrivateOrLocalHost("localhost") === true
+    && isPrivateOrLocalHost("127.0.0.1") === true
+    && isPrivateOrLocalHost("192.168.0.2") === true
+    && isPrivateOrLocalHost("leo.yunshuaiapi.com") === false
+    && isPrivateOrLocalHost("API.Jingyin.Online") === false,
+  "本地/内网 true，公网域名 false");
+check("isSafeRemoteImageUrl：https 公网放行、http 与内网拒绝",
+  isSafeRemoteImageUrl(REAL_CDN_URLS[0]) === true
+    && isSafeRemoteImageUrl(REAL_CDN_URLS[1]) === true
+    && isSafeRemoteImageUrl("http://leo.yunshuaiapi.com/x.png") === false
+    && isSafeRemoteImageUrl("https://10.1.2.3/x.png") === false,
+  "公网 https / 非 https / 内网");
 
 // ---------- B. 结果卡片状态 ----------
 const resultImage = await import("../../src/shared/result-image.js");
 {
-  const blockedImage = { type: "url", value: "https://api.luckfill.com/v1/images/generated/a.png", localUrl: "/api/image-proxy?url=http%3A%2F%2Fapi.luckfill.com%2Fv1%2Fimages%2Fgenerated%2Fa.png" };
+  // 内网地址：卡片必须不发请求，并给出可读原因
+  const blockedImage = { type: "url", value: "https://192.168.1.10/x.png", localUrl: "https://192.168.1.10/x.png" };
   const state = resultImage.resultImageCardState(blockedImage, (image) => image.localUrl);
-  check("结果卡片：非白名单地址 → src 为空（因此不发请求）",
-    state.missing === true && state.src === "" && /不属于允许的来源|协议不被允许/.test(state.reason),
+  check("结果卡片：内网地址 → src 为空（因此不发请求）",
+    state.missing === true && state.src === "" && /本机或内网|协议不被允许/.test(state.reason),
     JSON.stringify(state));
+
+  // 回归：真实渠道 CDN（非官方中转域名）必须被允许显示——这是本次故障的核心
+  const cdnImage = { type: "url", value: REAL_CDN_URLS[0], localUrl: REAL_CDN_URLS[0] };
+  const cdnState = resultImage.resultImageCardState(cdnImage, (image) => image.localUrl);
+  check("结果卡片：真实渠道 CDN（leo.yunshuaiapi.com）→ 允许显示",
+    cdnState.missing === false && cdnState.src === REAL_CDN_URLS[0],
+    JSON.stringify(cdnState));
+  const cdnImage2 = { type: "url", value: REAL_CDN_URLS[1], localUrl: REAL_CDN_URLS[1] };
+  const cdnState2 = resultImage.resultImageCardState(cdnImage2, (image) => image.localUrl);
+  check("结果卡片：真实渠道 CDN（tos.lingkeai.vip）→ 允许显示",
+    cdnState2.missing === false && cdnState2.src === REAL_CDN_URLS[1],
+    JSON.stringify(cdnState2));
 
   const okImage = { type: "url", value: "/api/history-image/a.png", localUrl: "/api/history-image/a.png" };
   const okState = resultImage.resultImageCardState(okImage, (image) => image.localUrl);
@@ -124,10 +178,14 @@ const resultImage = await import("../../src/shared/result-image.js");
     markedState.missing === true && /本地归档文件已丢失/.test(markedState.reason),
     JSON.stringify(markedState));
 
-  const blockedRef = { localUrl: "https://api.luckfill.com/x.png" };
-  check("参考图：非白名单地址 → 不允许加载",
+  const blockedRef = { localUrl: "https://10.0.0.9/x.png" };
+  check("参考图：内网地址 → 不允许加载",
     resultImage.isAllowedReferenceImage(blockedRef, (reference) => reference.localUrl) === false,
     "应返回 false");
+  const cdnRef = { localUrl: REAL_CDN_URLS[1] };
+  check("参考图：真实渠道 CDN → 允许加载",
+    resultImage.isAllowedReferenceImage(cdnRef, (reference) => reference.localUrl) === true,
+    "应返回 true");
   const okRef = { localUrl: "/api/reference-asset/ok.png" };
   check("参考图：本地地址 → 允许加载",
     resultImage.isAllowedReferenceImage(okRef, (reference) => reference.localUrl) === true,
@@ -137,7 +195,14 @@ const resultImage = await import("../../src/shared/result-image.js");
 // ---------- C. 服务端 /api/image-proxy 闸门 ----------
 const upstreamHits = [];
 const mock = http.createServer((req, res) => {
-  upstreamHits.push(String(req.url || ""));
+  const url = String(req.url || "");
+  upstreamHits.push(url);
+  // 生图请求：返回"非官方中转域名"的真实 CDN 图片地址（复现线上那次的形态）
+  if (/images\/(edits|generations)/.test(url)) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ created: Math.floor(Date.now() / 1000), data: [{ url: REAL_CDN_URLS[0] }] }));
+    return;
+  }
   res.writeHead(200, { "Content-Type": "image/png" });
   res.end(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
 });
@@ -166,8 +231,8 @@ let child = null;
 try {
   await listen(mock, 8804);
 
-  // 故意把渠道基址指向本地 mock：这样"允许的主机"就是 127.0.0.1，
-  // 用来验证白名单本身生效（放行白名单、拦截其它主机），而不是只验证某个具体域名。
+  // 渠道基址指向本地 mock：新规则下 127.0.0.1 属于"本地/内网"，正好用来验证 SSRF 闸门
+  // （拦内网目标、且**不发**上游请求）；公网 https 则应当放行。
   child = spawn(NODE, [path.join("server", "index.js")], {
     cwd: ROOT,
     stdio: ["ignore", "ignore", "ignore"],
@@ -181,32 +246,71 @@ try {
   });
   if (!(await waitForHealth(APP_PORT))) throw new Error("V11 测试实例未起来");
 
-  // C1) 白名单主机（=渠道基址所在主机）应放行并真的取到图
-  const allowedUrl = "http://127.0.0.1:8804/v1/images/generated/ok.png";
-  const allowedRes = await fetch(`http://127.0.0.1:${APP_PORT}/api/image-proxy?url=${encodeURIComponent(allowedUrl)}`);
-  check("服务端代理：白名单主机放行（200 且拿到图片）",
-    allowedRes.status === 200 && String(allowedRes.headers.get("content-type") || "").includes("image"),
-    `status=${allowedRes.status} ct=${allowedRes.headers.get("content-type")}`);
-  check("服务端代理：白名单请求确实转发到了上游",
-    upstreamHits.some((u) => u.includes("ok.png")),
-    upstreamHits.join(","));
-
-  const hitsBefore = upstreamHits.length;
-
-  // C2) 非白名单主机必须 403，且**不能**发起上游请求
-  const blockedUrl = "http://api.luckfill.com/v1/images/generated/gone.png";
-  const blockedRes = await fetch(`http://127.0.0.1:${APP_PORT}/api/image-proxy?url=${encodeURIComponent(blockedUrl)}`);
-  const blockedBody = await blockedRes.json().catch(() => null);
-  check("服务端代理：非白名单主机 → 403 blocked_image_host",
-    blockedRes.status === 403 && blockedBody?.message === "blocked_image_host",
-    `status=${blockedRes.status} body=${JSON.stringify(blockedBody)}`);
+  // C1) 内网/本地目标必须 403，且**不能**发起上游请求（防 SSRF）
+  const privateUrl = "http://127.0.0.1:8804/v1/images/generated/should-not-be-fetched.png";
+  const privateRes = await fetch(`http://127.0.0.1:${APP_PORT}/api/image-proxy?url=${encodeURIComponent(privateUrl)}`);
+  const privateBody = await privateRes.json().catch(() => null);
+  check("服务端代理：内网/本地目标 → 403 blocked_image_host",
+    privateRes.status === 403 && privateBody?.message === "blocked_image_host",
+    `status=${privateRes.status} body=${JSON.stringify(privateBody)}`);
   check("服务端代理：被拦时**没有**发起任何上游请求",
-    upstreamHits.length === hitsBefore,
-    `上游请求数 before=${hitsBefore} after=${upstreamHits.length}`);
+    upstreamHits.length === 0,
+    `上游请求数=${upstreamHits.length}`);
+
+  // C2) 真实渠道 CDN（非官方中转域名）**不再**被拦——这是本次故障的回归点。
+  // 这条会真的走一次外网；网络不可用时允许失败，但**绝不能**是 403。
+  const cdnRes = await fetch(`http://127.0.0.1:${APP_PORT}/api/image-proxy?url=${encodeURIComponent(REAL_CDN_URLS[0])}`);
+  check("服务端代理：真实渠道 CDN 不再被 403（外网失败可接受）",
+    cdnRes.status !== 403,
+    `status=${cdnRes.status}`);
+  if (cdnRes.status === 200) {
+    check("服务端代理：CDN 取回的是图片",
+      String(cdnRes.headers.get("content-type") || "").includes("image"),
+      `ct=${cdnRes.headers.get("content-type")}`);
+  }
 
   // C3) 非法协议仍是 400（原有行为不变）
   const badRes = await fetch(`http://127.0.0.1:${APP_PORT}/api/image-proxy?url=${encodeURIComponent("ftp://x/y.png")}`);
   check("服务端代理：非法协议仍是 400", badRes.status === 400, `status=${badRes.status}`);
+
+  // C4) 端到端回归（就是线上那次故障的形态）：
+  //     上游返回结果图的地址在 leo.yunshuaiapi.com（非官方中转域名）→ 服务端的"显示缓存"
+  //     必须能把它下载并落成本地 /api/result/ 地址；至少不能是自己判 blocked_image_host 拦掉的。
+  {
+    const form = new FormData();
+    form.set("payload", JSON.stringify({
+      taskId: "image-host-cdn-result",
+      apiKey: "sk-mock-not-real",
+      model: "banana-2",
+      channelId: "silent-banana-line-08",
+      dispatchMode: "manual",
+      imageSize: "2K",
+      aspectRatio: "3:4",
+      prompt: "image host check",
+      workflowMode: "outfit",
+      pageName: "批量AI换装",
+      pairingMode: "fixed",
+      smartIntervention: false,
+      garmentParts: { upper: "single-upper", lower: "" },
+      garmentComposition: "single-upper",
+      garmentLengths: { upper: "", lower: "" },
+      referenceCount: 0
+    }));
+    form.append("image", tinyPng("model.png"), "model.png");
+    form.append("image", tinyPng("clothing.png"), "clothing.png");
+    const res = await fetch(`http://127.0.0.1:${APP_PORT}/api/generate-outfit`, { method: "POST", body: form });
+    const body = await res.json().catch(() => null);
+    const localUrl = String(body?.image?.localUrl || "");
+    const assetLogFile = path.join(SANDBOX_ROOT, "logs", "asset-errors.jsonl");
+    const assetLog = existsSync(assetLogFile) ? (await import("node:fs")).readFileSync(assetLogFile, "utf8") : "";
+    const blockedByOwnGate = /image-proxy-blocked-host[\s\S]{0,200}leo\.yunshuaiapi\.com/.test(assetLog);
+    check("端到端：上游结果图在非官方中转域名时，不再被自己的白名单拦下",
+      body?.ok === true && blockedByOwnGate === false,
+      `ok=${body?.ok} localUrl=${localUrl} blockedByOwnGate=${blockedByOwnGate}`);
+    check("端到端：该结果图落成本地地址（/api/result/），或仅因外网不可达而未落盘",
+      /^\/api\/result\//.test(localUrl) || blockedByOwnGate === false,
+      `localUrl=${localUrl}`);
+  }
 } catch (error) {
   results.push({ name: "fatal", pass: false, detail: error instanceof Error ? error.message : String(error) });
 } finally {
@@ -228,17 +332,21 @@ for (let attempt = 0; attempt < 6 && !sandboxRemoved; attempt += 1) {
   if (!sandboxRemoved) await new Promise((resolve) => setTimeout(resolve, 600));
 }
 
-// ---------- D. 前后端白名单一致性 ----------
+// ---------- D. 前后端一致性（同一条规则，不允许各写一套）----------
 {
-  const source = await import("node:fs").then((fs) => fs.readFileSync(path.join(ROOT, "server", "index.js"), "utf8"));
-  const usesChannelConfig = /ALLOWED_IMAGE_PROXY_HOSTS[\s\S]{0,400}PRIMARY_CHANNEL_API_BASE_URL/.test(source);
-  check("服务端白名单来自渠道配置（避免两处硬编码漂移）", usesChannelConfig, "已确认引用 PRIMARY_CHANNEL_API_BASE_URL");
-  const channelConfig = await import("node:fs").then((fs) => fs.readFileSync(path.join(ROOT, "server", "channel-config.js"), "utf8"));
-  const hosts = [...channelConfig.matchAll(/https?:\/\/([^/"'\s]+)/g)].map((m) => m[1].toLowerCase());
-  const uniqueHosts = [...new Set(hosts)];
-  check("渠道配置里的主机都在前端白名单内（前端不会误拦真实渠道图）",
-    uniqueHosts.every((host) => ALLOWED_IMAGE_HOSTS.includes(host)),
-    `渠道主机=${uniqueHosts.join(",")} / 前端白名单=${ALLOWED_IMAGE_HOSTS.join(",")}`);
+  const fs = await import("node:fs");
+  const serverSource = fs.readFileSync(path.join(ROOT, "server", "index.js"), "utf8");
+  check("服务端 import 了前端的同一份图片规则（单一来源，不会漂移）",
+    /from "\.\.\/src\/shared\/image-hosts\.js"/.test(serverSource) && /isSafeRemoteImageUrl\(/.test(serverSource),
+    "server/index.js → src/shared/image-hosts.js");
+  check("服务端不再把渠道 API 主机当图片白名单（图片回传不限域名）",
+    !/ALLOWED_IMAGE_PROXY_HOSTS|isAllowedImageProxyHost/.test(serverSource),
+    "旧白名单符号已移除");
+  // 生图 API 仍然只允许官方中转：这条规则不能被上面的放宽带偏
+  const channelConfig = fs.readFileSync(path.join(ROOT, "server", "channel-config.js"), "utf8");
+  check("生图 API 仍然锁死官方中转（PRIMARY_CHANNEL_API_BASE_URL 仍在渠道配置里）",
+    /PRIMARY_CHANNEL_API_BASE_URL/.test(channelConfig) && /api\.jingyin\.online/.test(channelConfig),
+    "生成路径不受图片放宽影响");
 }
 
 const failed = results.filter((item) => !item.pass);
@@ -248,7 +356,11 @@ console.log(JSON.stringify({
   passed: results.length - failed.length,
   failed: failed.length,
   sandboxRemoved,
-  allowlist: ALLOWED_IMAGE_HOSTS,
+  policy: {
+    generationApi: "仅官方中转 https://api.jingyin.online",
+    resultImages: "不限域名：https 公网主机放行；非 https 与本地/内网拒绝"
+  },
+  realCdnSamples: REAL_CDN_URLS,
   failures: failed,
   results
 }, null, 2));
