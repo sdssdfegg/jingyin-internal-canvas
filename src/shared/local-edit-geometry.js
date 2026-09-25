@@ -20,6 +20,29 @@
 export const LOCAL_EDIT_RECT_MODE = "rect";
 export const LOCAL_EDIT_MASK_MODE = "mask";
 
+/**
+ * 局部回贴：**裁剪源 / 贴回底图必须是同一张图**。规则只有一条 —— 原图优先。
+ *
+ * 为什么要有这个函数（2026-09-26 批量局部回贴贴回错位事故）：
+ *   上传图片对象上其实挂着两份文件：
+ *     - `originalFile`：用户上传的原图（长边可能 3500，几 MB 起）；
+ *     - `file`：**送中转渠道的上传副本**。原图 >4MB 时会被压到长边 3072 并重新编码
+ *       （`src/outfit-workflow.jsx` 的 `compressOriginalImageFile` / `CHANNEL_UPLOAD_MAX_SIDE`），
+ *       原图 ≤4MB 时它和 `originalFile` 是同一个 File。
+ *   局部选框 UI（`OutfitLocalEditModal`）、选框裁剪、诊断快照全都是按 `originalFile`
+ *   的像素坐标算的；所以贴回底图也必须是 `originalFile`。
+ *   一旦贴回改回"上传副本优先"，原图 >4MB 时就会出现：
+ *   3500 坐标的选框贴到 3072 画布上 → 输出尺寸变成 3072、补丁相对底图放大约 1.14 倍并偏移。
+ *   （实测产物：原图 2334×3500 + 上传副本 2049×3072 → 贴回结果 2049×3072。）
+ *
+ * @param {{originalFile?: File|null, file?: File|null}|null} item 上传图片对象
+ * @returns {File|null} 局部回贴的裁剪源 / 贴回底图
+ */
+export function resolveLocalEditBaseFile(item) {
+  if (!item) return null;
+  return item.originalFile || item.file || null;
+}
+
 /** 把选框夹进图片范围内，宽高保持整数像素，**不做任何比例或最小尺寸改写**。 */
 export function constrainCropRect(rect, imageWidth, imageHeight) {
   const width = Math.max(1, Math.min(Math.round(rect?.width || 1), imageWidth));

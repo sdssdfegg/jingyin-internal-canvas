@@ -39,6 +39,7 @@ const ORDER = [
   "history-repair-check",
   "history-integrity-check",
   "local-edit-ratio-check",
+  "local-edit-base-file-check",
   "resize-long-edge-check",
   "generation-error-check",
   "reference-gate-check",

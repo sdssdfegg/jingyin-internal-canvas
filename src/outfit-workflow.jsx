@@ -69,6 +69,7 @@ import {
   fitRectToRatioLocked,
   resizeRectFromCenterLocked,
   resizeRectFromCornerLocked,
+  resolveLocalEditBaseFile,
   scaleRectLocked,
   snapSizeToRatio
 } from "./shared/local-edit-geometry.js";
@@ -3103,7 +3104,7 @@ function localEditTaskBindingSnapshot(task, localEdit, taskAspectRatio, uploadFi
     sourceName: localEdit?.sourceName || task?.modelItem?.name || "",
     aspectRatio: taskAspectRatio || localEdit?.aspectRatio || task?.aspectRatio || "",
     recroppedAt: Number(localEdit?.recroppedAt || 0) || null,
-    originalFile: localEditFileSnapshot(task?.modelItem?.originalFile || task?.modelItem?.file),
+    originalFile: localEditFileSnapshot(resolveLocalEditBaseFile(task?.modelItem)),
     cropFile: localEditFileSnapshot(localEdit?.cropFile),
     uploadFile: localEditFileSnapshot(uploadFile),
     cropRect: localEditRectSnapshot(localEdit?.cropRect),
@@ -3120,7 +3121,7 @@ function localEditTaskBindingSnapshot(task, localEdit, taskAspectRatio, uploadFi
  * 不再返回 `contextRect`。见 src/main.jsx 同名函数的说明。
  */
 async function cropOutfitLocalEditFile(imageItem, cropRect, suffix = "local_edit", _options = {}) {
-  const originalFile = imageItem?.originalFile || imageItem?.file;
+  const originalFile = resolveLocalEditBaseFile(imageItem);
   if (!originalFile) throw new Error("缺少原图，无法创建局部回贴区域");
   const image = await imageBitmapFromFile(originalFile);
   try {
@@ -4796,7 +4797,7 @@ function OutfitLocalEditModal({ item, ratio, onRatioChange, onClose, onApply, on
   const [maskPainted, setMaskPainted] = useState(false);
   const [maskRevision, setMaskRevision] = useState(0);
   const [working, setWorking] = useState(false);
-  const originalFile = item?.originalFile || item?.file;
+  const originalFile = resolveLocalEditBaseFile(item);
   const savedEdit = item?.localEdit || null;
   const isMaskMode = editMode === LOCAL_EDIT_MASK_MODE;
   const activeRatio = BATCH_LOCAL_EDIT_RATIOS.includes(ratio)
@@ -6162,7 +6163,7 @@ function LocalDetailPanel({
       const generatedBlob = await blobFromOutfitImage(payload.images[0]);
       // 2026-09-25 对齐 3.0：局部回贴不做自动对齐 / 颜色匹配 / 中性色调匹配 / 羽化。
       const composedBlob = await composeOutfitLocalEditBlob(
-        selectedBase.originalFile || selectedBase.file,
+        resolveLocalEditBaseFile(selectedBase),
         generatedBlob,
         localEdit.cropRect,
         localEdit
@@ -9329,7 +9330,11 @@ function buildTasks(countOverride = plannedGenerationCount) {
     let displayImage = null;
     if (localEdit) {
       updateTaskRuntime(task.id, "本地贴回合成", "下载模型结果并贴回原图");
-      const originalFile = imageItemUploadFile(task.modelItem);
+      // 贴回底图必须与选框坐标同一张图：选框/裁剪都是按 originalFile（原图）算的。
+      // 不能用 imageItemUploadFile()（那是"上传副本优先"，>4MB 的原图会被压到长边 3072）。
+      // 用错会在 3072 画布上贴 3500 坐标的选框：输出尺寸掉到 3072、补丁放大并偏移。
+      const originalFile = resolveLocalEditBaseFile(task.modelItem);
+      if (!originalFile) throw new Error("缺少图1原图，无法把局部结果贴回");
       const generatedBlob = await blobFromOutfitImage(payload.image);
       // 2026-09-25 对齐 3.0：贴回不再做任何后处理（自动对齐 / 颜色匹配 /
       // 中性色调匹配 / 羽化 / 护脸护身）。3.0 localPaste.ts 的契约是"贴回就是贴回"。

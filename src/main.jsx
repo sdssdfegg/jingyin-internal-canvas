@@ -69,6 +69,7 @@ import {
   fitRectToRatioLocked,
   resizeRectFromCenterLocked,
   resizeRectFromCornerLocked,
+  resolveLocalEditBaseFile,
   scaleRectLocked,
   snapSizeToRatio
 } from "./shared/local-edit-geometry.js";
@@ -1100,7 +1101,9 @@ function normalizeQuickReferenceItem(item) {
 }
 
 function quickReferenceOriginalFile(item) {
-  return item?.originalFile || item?.file || item;
+  // 与批量侧同一份规则（原图优先）：局部回贴的裁剪源与贴回底图必须是同一张图。
+  // 这里保留 `|| item` 兜底，因为快捷侧的条目可能就是裸 File。
+  return resolveLocalEditBaseFile(item) || item;
 }
 
 function quickReferenceUploadFile(item) {
