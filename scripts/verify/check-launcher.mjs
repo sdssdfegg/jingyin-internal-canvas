@@ -117,6 +117,31 @@ check("ps1 不再提示直接双击 node.exe", !/Do not open D:\\RJ/.test(ps1Tex
 check("ps1 保留自动打开浏览器逻辑", ps1Text.includes("Start-Process $AppUrl"));
 check("ps1 支持 -NoOpen", ps1Text.includes("[switch]$NoOpen"));
 
+// ---------------------------------------------------------------- 窗口常驻 + 跟随日志
+// 需求（2026-09-25）：点启动器进去页面后，黑框不要自动消失；窗口留着并能看服务日志。
+// 服务本身在独立进程里跑，所以"关窗"与"停服务"是两件事。
+check("ps1 支持 -KeepOpen（窗口常驻 + 跟随日志）",
+  ps1Text.includes("[switch]$KeepOpen"), "[switch]$KeepOpen");
+check("bat 把 -KeepOpen 传给 ps1",
+  /-File "%START_SCRIPT%" -KeepOpen/.test(batText), "bat → ps1");
+check("bat 成功后不再 8 秒自动关窗",
+  !/timeout\s+\/t\s+8/.test(batText), "没有 timeout /t 8");
+check("bat 成功后用 pause 顶住窗口",
+  /LAUNCHER FINISHED[\s\S]{0,600}?pause\s*>\s*nul/.test(batText), "pause 在收尾提示之后");
+check("bat 明确告知关窗不会停服务",
+  /Closing this window does NOT stop the server/.test(batText), "提示文案");
+check("bat 把跟随日志被 Ctrl+C 中断当成正常收尾（不当启动失败）",
+  batText.includes(":follow_stopped") && batText.includes('"%START_EXIT%"=="-1073741510"'),
+  "follow_stopped 分支");
+check("ps1 在 -KeepOpen 时跟随日志（Get-Content -Wait）",
+  /Get-Content\s+-LiteralPath\s+\$ServerLog[\s\S]{0,40}-Wait/.test(ps1Text), "Get-Content -Wait $ServerLog");
+check("ps1 在 -KeepOpen 时提示关窗不停服务",
+  ps1Text.includes("关闭窗口不会停止服务"), "提示文案");
+check("ps1 的跟随日志代码在成功路径之后（exit 0 之前）",
+  ps1Text.indexOf("if ($KeepOpen)") > ps1Text.indexOf("启动成功 / started successfully")
+    && ps1Text.indexOf("if ($KeepOpen)") < ps1Text.lastIndexOf("exit 0"),
+  `keepOpenIndex=${ps1Text.indexOf("if ($KeepOpen)")}`);
+
 // PowerShell 解析器语法检查
 const parseScript = [
   "$errors = $null; $tokens = $null;",

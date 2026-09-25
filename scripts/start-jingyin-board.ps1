@@ -1,6 +1,9 @@
 ﻿param(
   [switch]$NoOpen,
   [int]$Port = 0,
+  # 启动成功后保持这个控制台窗口不关，并跟随服务日志（启动 bat 会传它）。
+  # 服务本身跑在独立进程里，关掉窗口不会停服务；这个开关只影响"窗口留不留、看不看日志"。
+  [switch]$KeepOpen,
   # 仅供校验使用的入口覆盖参数：默认就是真实入口 server\index.js。
   # scripts/verify/check-launcher-exitcode.mjs 会把它指向一个受控 fixture，
   # 用来证明"Node 启动失败时保留真实退出码"这条要求确实成立。
@@ -706,6 +709,34 @@ Write-Host ""
 
 if (-not $shouldStart) {
   Save-Diagnostic
+}
+
+# 启动成功（或服务已在运行）之后，按 bat 的要求把窗口留住并跟随日志。
+# 说明：
+#   - 服务是 cmd 起的独立进程，关掉本窗口不会停服务；
+#   - Ctrl+C 只停止"跟随日志"，不影响服务；
+#   - 跟结束之后**不在这里 Read-Host**：窗口由 bat 末尾的 pause 顶住，
+#     否则会出现"PS1 按一次键 + bat 再按一次键"的双重停顿。
+if ($KeepOpen) {
+  Write-Host "----------------------------------------------------------------------"
+  Write-Host "这个窗口会保持打开，下面跟随服务日志（新日志会继续出现在这里）。"
+  Write-Host "  · 关闭窗口不会停止服务（服务在独立进程里跑）"
+  Write-Host "  · 按 Ctrl+C 只是停止跟随日志，不影响服务"
+  Write-Host "日志文件：$ServerLog"
+  Write-Host "----------------------------------------------------------------------"
+  Write-Host ""
+  try {
+    if (Test-Path -LiteralPath $ServerLog) {
+      Get-Content -LiteralPath $ServerLog -Tail 30 -Wait
+    } else {
+      Write-Host "（日志文件还没有生成：$ServerLog）"
+    }
+  } catch {
+    # Ctrl+C 或读文件失败都走这里：只提示，不当作启动失败
+    Write-Host ""
+  }
+  Write-Host ""
+  Write-Host "已停止跟随日志（服务仍在运行）。"
 }
 
 exit 0

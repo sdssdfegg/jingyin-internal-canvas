@@ -62,13 +62,19 @@ echo Probing for Node.js and starting the local server...
 echo.
 
 rem Working directory is pinned to the source root; extra args are passed through.
+rem -KeepOpen: keep this console window open after a successful start and follow
+rem the server log (the server itself runs in its own process, so closing this
+rem window does NOT stop it).
 pushd "%APP_DIR%"
-"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%START_SCRIPT%" %*
+"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%START_SCRIPT%" -KeepOpen %*
 set "START_EXIT=%ERRORLEVEL%"
 popd
 
 echo.
 if not "%START_EXIT%"=="0" (
+  rem Ctrl+C while following the log ends the follow, not the launcher.
+  if "%START_EXIT%"=="-1073741510" goto follow_stopped
+  if "%START_EXIT%"=="3221225786" goto follow_stopped
   echo ========================================
   echo  STARTUP FAILED
   echo ========================================
@@ -87,13 +93,27 @@ if not "%START_EXIT%"=="0" (
 )
 
 echo ========================================
-echo  STARTED
+echo  LAUNCHER FINISHED
 echo ========================================
-echo Use the URL printed above. If the browser did not open automatically,
-echo copy that URL into the browser yourself.
+echo The launcher has finished. Use the URL printed above.
+echo If the browser did not open automatically, copy that URL into the browser.
 echo.
-echo This window closes in 8 seconds. Press any key to keep it open.
-timeout /t 8 >nul 2>nul
+echo The server keeps running in its own process.
+echo Closing this window does NOT stop the server.
+echo Press any key to close this window.
+echo.
+pause >nul
 
+endlocal
+exit /b 0
+
+:follow_stopped
+echo ========================================
+echo  LOG FOLLOWING STOPPED
+echo ========================================
+echo The server is still running in its own process.
+echo Press any key to close this window.
+echo.
+pause >nul
 endlocal
 exit /b 0
