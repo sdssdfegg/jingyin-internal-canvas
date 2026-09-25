@@ -12,6 +12,8 @@
     "check:syntax": "node --check server/index.js && node --check server/channel.js && node --check server/channel-config.js && node --check server/billing-gateway.js && node --check server/video-config.js && node --check server/detail-skills.js && node --check server/detail-ai.js && node --check server/detail-middleware.js && node --check server/reference-ai.js && node --check server/quick-prompt-ai.js && node --check server/outfit-skill.js && node --check server/outfit-pose-ai.js && node --check server/outfit-master-fit-ai.js && node --check server/outfit-quality-ai.js",
     "check": "node --check server/index.js && node --check server/channel.js && node --check server/channel-config.js && node --check server/billing-gateway.js && node --check server/video-config.js && node --check server/detail-skills.js && node --check server/detail-ai.js && node --check server/detail-middleware.js && node --check server/reference-ai.js && node --check server/quick-prompt-ai.js && node --check server/outfit-skill.js && node --check server/outfit-pose-ai.js && node --check server/outfit-master-fit-ai.js && node --check server/outfit-quality-ai.js && node scripts/verify/run-all.mjs",
     "build:assets": "node scripts/generate-static-assets.mjs",
+    "lint": "eslint .",
+    "lint:json": "eslint . --format json",
     "release:win": "node scripts/secure-win-release.mjs"
   },
   "dependencies": {
@@ -29,6 +31,10 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
     "javascript-obfuscator": "^5.5.0",
     "postject": "^1.0.0-alpha.6",
     "rcedit": "^5.0.2"

@@ -10,7 +10,7 @@
 //
 // 用法：node scripts/verify/run-all-check.mjs
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
@@ -20,10 +20,6 @@ const NODE = process.execPath;
 const results = [];
 function check(name, pass, detail = "") {
   results.push({ name, pass: Boolean(pass), detail: String(detail) });
-}
-/** 同步等待（spawnSync 场景下没法 await）。 */
-function sleepSync(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 const pkg = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8"));

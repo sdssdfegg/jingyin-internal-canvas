@@ -11,7 +11,7 @@
 // 用法：node scripts/verify/pro-wire-check.mjs
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync, readdirSync, unlinkSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import process from "node:process";

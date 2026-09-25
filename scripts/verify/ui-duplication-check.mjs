@@ -101,7 +101,6 @@ check(
 );
 
 // 8) 悬浮框尺寸稳定性：min-width / min-height 必须是固定值
-const composerRule = mainJsx.includes("section.composer") ? "" : "";
 const cssText = readFileSync(path.join(root, "src", "styles.css"), "utf8");
 const composerBlock = cssText.slice(cssText.indexOf(".composer {"), cssText.indexOf(".composer {") + 700);
 check("悬浮框有 min-width", /min-width:\s*\d+px/.test(composerBlock), (composerBlock.match(/min-width:[^;]+/) || [""])[0]);
