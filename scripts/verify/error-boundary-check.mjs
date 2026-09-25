@@ -121,7 +121,9 @@ await page.goto("http://127.0.0.1:${APP_PORT}/", {waitUntil: "domcontentloaded"}
 await page.waitForTimeout(1800);
 return await page.evaluate(async () => {
   const mod = await import("/scripts/verify/error-boundary-page.jsx?v=" + Date.now());
-  return await mod.run();
+  const probe = await mod.run();
+  const wiring = await mod.runWiring();
+  return { probe, wiring };
 });
 `;
       mkdirSync(path.dirname(programFile), { recursive: true });
@@ -174,7 +176,8 @@ return await page.evaluate(async () => {
 }
 
 if (browserResult.ran) {
-  const p = browserResult.payload;
+  const p = browserResult.payload?.probe || {};
+  const w = browserResult.payload?.wiring || {};
   check("浏览器：渲染期抛错 → 显示兜底面板（不是白屏）", p.fallbackRendered === true, JSON.stringify(p));
   check("浏览器：兜底面板带区域名与可读原因", /「验证区域」这块界面出错了/.test(p.fallbackText || ""), p.fallbackText);
   check("浏览器：提供重试 / 重新加载 / 复制诊断三个入口",
@@ -182,6 +185,44 @@ if (browserResult.ran) {
     JSON.stringify(p.buttons));
   check("浏览器：错误文本在真实渲染里也被脱敏（sk- → sk-***）", p.leaksRawKey === false, `leaksRawKey=${p.leaksRawKey}`);
   check("浏览器：应用主体仍在（没有整页崩掉）", p.appStillAlive === true, `appStillAlive=${p.appStillAlive}`);
+
+  // ---- 兜底面板的行为契约（第 5 步之外补的：不只"渲染出来"，还要能恢复）----
+  check("浏览器：兜底面板是 role=alert 且有「其它功能仍可用」提示",
+    p.panelRole === "alert" && p.hintMentionsOthersUsable === true,
+    `role=${p.panelRole} hint=${p.hintMentionsOthersUsable}`);
+  check("浏览器：点「重试这一块」能恢复渲染并清掉兜底面板",
+    p.retryRecovered === true && p.retryClearedPanel === true && p.retryKeptSibling === true,
+    `recovered=${p.retryRecovered} cleared=${p.retryClearedPanel} sibling=${p.retryKeptSibling}`);
+  check("浏览器：崩溃区域旁边的另一个边界不受影响（兄弟隔离）",
+    p.siblingBoundarySurvives === true && p.siblingPanelOnlyOne === true && p.siblingPanelLabelIsBadRegion === true,
+    `survives=${p.siblingBoundarySurvives} panels=${p.siblingPanelOnlyOne} label=${p.siblingPanelLabelIsBadRegion}`);
+  check("浏览器：嵌套时内层吃掉异常，外层不被触发（对应 主界面 > 批量生成/图片编辑）",
+    p.nestedInnerPanelShown === true && p.nestedOuterNotTriggered === true && p.nestedOuterContentAlive === true,
+    `inner=${p.nestedInnerPanelShown} outerTriggered=${!p.nestedOuterNotTriggered} outerAlive=${p.nestedOuterContentAlive}`);
+  check("浏览器：兜底同时上报诊断（stage=client-render-error，带区域名与组件栈）",
+    p.reportedStage === "client-render-error" && p.reportedLabel === "验证区域" && p.reportedHasComponentStack === true,
+    `stage=${p.reportedStage} label=${p.reportedLabel} stack=${p.reportedHasComponentStack}`);
+  check("浏览器：上报内容与复制出来的诊断都不含原始 KEY（脱敏）",
+    p.reportedMessageSanitized === true && p.copiedTextSanitized === true,
+    `report=${p.reportedMessageSanitized} copy=${p.copiedTextSanitized}`);
+  check("浏览器：点「复制诊断」不抛错且文本带区域名",
+    p.copyClickedWithoutThrowing === true && p.copiedTextHasLabel === true,
+    `clicked=${p.copyClickedWithoutThrowing} hasLabel=${p.copiedTextHasLabel}`);
+
+  // ---- 运行时接线：在活的应用树上确认边界真的挂在那几个区域 ----
+  const labelsOf = (list) => (Array.isArray(list) ? list.map((item) => item.label) : []);
+  const batchEntry = Array.isArray(w.batch) ? w.batch.find((item) => item.label === "批量生成") : null;
+  const editorEntry = Array.isArray(w.editor) ? w.editor.find((item) => item.label === "图片编辑") : null;
+  check("活树：能读到 React 根（fiber 可遍历）", w.rootFiberFound === true, `rootFiberFound=${w.rootFiberFound}`);
+  check("活树：应用主体确实在「应用主界面」边界内", w.appShellInsideMain === true, `appShellInsideMain=${w.appShellInsideMain}`);
+  check("活树：快捷页存在「应用主界面」边界", labelsOf(w.quick).includes("应用主界面"), labelsOf(w.quick).join(",") || "(无)");
+  check("活树：切到批量页后挂上「批量生成」边界，且嵌在「应用主界面」内",
+    Boolean(batchEntry) && batchEntry.parentLabel === "应用主界面",
+    `labels=${labelsOf(w.batch).join(",") || "(无)"} parent=${batchEntry?.parentLabel || "-"}`);
+  check("活树：切到图片编辑后挂上「图片编辑」边界，且嵌在「应用主界面」内",
+    Boolean(editorEntry) && editorEntry.parentLabel === "应用主界面",
+    `labels=${labelsOf(w.editor).join(",") || "(无)"} parent=${editorEntry?.parentLabel || "-"}`);
+  check("活树：验证完把视图切回进入时的状态（不留副作用）", w.restoredView === true, `restoredView=${w.restoredView}`);
 } else {
   results.push({ name: "浏览器部分（跳过）", pass: true, detail: browserResult.reason || "未运行" });
 }
