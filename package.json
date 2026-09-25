@@ -7,7 +7,10 @@
     "dev": "node server/index.js",
     "build": "vite build",
     "start": "node server/index.js",
-    "check": "node --check server/index.js && node --check server/channel.js && node --check server/channel-config.js && node --check server/billing-gateway.js && node --check server/video-config.js && node --check server/detail-skills.js && node --check server/detail-ai.js && node --check server/detail-middleware.js && node --check server/reference-ai.js && node --check server/quick-prompt-ai.js && node --check server/outfit-skill.js && node --check server/outfit-pose-ai.js && node --check server/outfit-master-fit-ai.js && node --check server/outfit-quality-ai.js",
+    "test": "node scripts/verify/run-all.mjs",
+    "test:fast": "node scripts/verify/run-all.mjs --skip-launcher",
+    "check:syntax": "node --check server/index.js && node --check server/channel.js && node --check server/channel-config.js && node --check server/billing-gateway.js && node --check server/video-config.js && node --check server/detail-skills.js && node --check server/detail-ai.js && node --check server/detail-middleware.js && node --check server/reference-ai.js && node --check server/quick-prompt-ai.js && node --check server/outfit-skill.js && node --check server/outfit-pose-ai.js && node --check server/outfit-master-fit-ai.js && node --check server/outfit-quality-ai.js",
+    "check": "node --check server/index.js && node --check server/channel.js && node --check server/channel-config.js && node --check server/billing-gateway.js && node --check server/video-config.js && node --check server/detail-skills.js && node --check server/detail-ai.js && node --check server/detail-middleware.js && node --check server/reference-ai.js && node --check server/quick-prompt-ai.js && node --check server/outfit-skill.js && node --check server/outfit-pose-ai.js && node --check server/outfit-master-fit-ai.js && node --check server/outfit-quality-ai.js && node scripts/verify/run-all.mjs",
     "build:assets": "node scripts/generate-static-assets.mjs",
     "release:win": "node scripts/secure-win-release.mjs"
   },

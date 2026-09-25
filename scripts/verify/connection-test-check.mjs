@@ -9,7 +9,8 @@
 // 用法：node scripts/verify/connection-test-check.mjs
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { freshSandbox, removeTreeSync } from "./lib/sandbox.mjs";
 import path from "node:path";
 import process from "node:process";
 
@@ -99,8 +100,7 @@ function check(name, pass, detail = "") {
   results.push({ name, pass: Boolean(pass), detail: String(detail) });
 }
 
-rmSync(SANDBOX_ROOT, { recursive: true, force: true });
-mkdirSync(SANDBOX_ROOT, { recursive: true });
+freshSandbox(SANDBOX_ROOT);
 
 let child = null;
 try {
@@ -195,7 +195,7 @@ if (child && child.exitCode === null && child.signalCode === null) {
 await new Promise((resolve) => setTimeout(resolve, 300));
 let sandboxRemoved = false;
 for (let attempt = 0; attempt < 4 && !sandboxRemoved; attempt += 1) {
-  try { rmSync(SANDBOX_ROOT, { recursive: true, force: true }); } catch { /* ignore */ }
+  removeTreeSync(SANDBOX_ROOT);
   sandboxRemoved = !existsSync(SANDBOX_ROOT);
   if (!sandboxRemoved) await new Promise((resolve) => setTimeout(resolve, 400));
 }

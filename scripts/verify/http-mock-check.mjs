@@ -7,18 +7,70 @@
 //   - 非法 / 旧 channelId 被服务端拒绝（在调用上游之前就返回 400）
 //   - 合法 channelId + 无 KEY -> missing_api_key，证明校验通过且没有触发上游生图
 //
-// 用法：node scripts/verify/http-mock-check.mjs http://127.0.0.1:8899
+// 用法：
+//   node scripts/verify/http-mock-check.mjs              # 自包含：自己拉起测试实例
+//   node scripts/verify/http-mock-check.mjs <baseUrl>    # 外部模式：复用已在跑的服务
+//
+// 自包含模式下测试实例的数据目录被挪到 .codex-artifacts/http-mock-check，
+// 绝不写入用户的 data/ 与 logs/。
 import process from "node:process";
 import { readFileSync, existsSync } from "node:fs";
+import { spawn } from "node:child_process";
 import path from "node:path";
+import { freshSandbox, installExitCleanup, removeSandbox, stopChild } from "./lib/sandbox.mjs";
 
-const baseUrl = (process.argv[2] || "http://127.0.0.1:8899").replace(/\/+$/, "");
+const externalBaseUrl = process.argv[2] ? process.argv[2].replace(/\/+$/, "") : "";
+const baseUrl = externalBaseUrl || "http://127.0.0.1:8899";
 const workspaceRoot = process.cwd();
 let failures = 0;
 const lines = [];
 function check(name, ok, detail = "") {
   lines.push(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` :: ${detail}` : ""}`);
   if (!ok) failures += 1;
+}
+
+// ---------------------------------------------------------------- 测试实例生命周期
+const NODE = path.join(workspaceRoot, "runtime", "node", "node.exe");
+const APP_PORT = 8899;
+const SANDBOX_ROOT = path.join(workspaceRoot, ".codex-artifacts", "http-mock-check");
+// 日志也要落在沙盒里：下面用这个前缀读被测实例自己的 generation.jsonl。
+let logsRoot = workspaceRoot;
+let child = null;
+
+async function waitForHealth(port, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/health`);
+      if (res.ok) return true;
+    } catch { /* 还没起来 */ }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  return false;
+}
+
+if (!externalBaseUrl) {
+  // freshSandbox 是「真删 + 重建」：工作区路径上的 rmSync 会静默无效（见 lib/sandbox.mjs）。
+  freshSandbox(SANDBOX_ROOT);
+  logsRoot = SANDBOX_ROOT;
+  // 中途抛错时的兜底清理；正常路径在文件末尾显式收尾（要等进程真的退出）。
+  installExitCleanup({ getChild: () => child, sandboxDir: SANDBOX_ROOT });
+  child = spawn(NODE, [path.join("server", "index.js")], {
+    cwd: workspaceRoot,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: {
+      ...process.env,
+      PORT: String(APP_PORT),
+      // 端口被占时直接失败，不漂到别的端口去测一个不是我们起的进程。
+      JINGYIN_PORT_FALLBACK_LIMIT: "0",
+      JINGYIN_RELEASE_ROOT: SANDBOX_ROOT,
+      JINGYIN_NO_BROWSER: "1"
+    }
+  });
+  if (!(await waitForHealth(APP_PORT))) {
+    console.log(`[http-mock-check] 测试实例未在 ${APP_PORT} 端口就绪，无法继续`);
+    process.exit(1);
+  }
 }
 
 function tinyPng(name) {
@@ -184,7 +236,7 @@ for (const [channelId, kind] of forbiddenCases) {
 // 旧 channelId 必须在**智能介入之前**就被拒绝，不能先花钱再报错。
 // 用假 KEY 只是为了通过最前面的 API Key 存在性检查；因为路由先失败，
 // 服务端不会发生任何上游请求。
-const outfitLogPath = path.join(workspaceRoot, "logs", "generation.jsonl");
+const outfitLogPath = path.join(logsRoot, "logs", "generation.jsonl");
 const outfitLogSizeBefore = existsSync(outfitLogPath) ? readFileSync(outfitLogPath).length : 0;
 {
   const requestId = `mock-outfit-forbidden-${Date.now()}`;
@@ -229,5 +281,18 @@ const outfitLogSizeBefore = existsSync(outfitLogPath) ? readFileSync(outfitLogPa
 }
 
 console.log(lines.join("\n"));
-console.log(`\n[http-mock-check] 失败 ${failures} 项 / 共 ${lines.length} 项`);
+
+// 收尾：先等测试实例真的退出（它在退出前还会写一次日志），再删沙盒，
+// 否则 Windows 上的文件句柄会让目录删不干净。
+let teardown = "";
+if (!externalBaseUrl) {
+  const childStopped = await stopChild(child);
+  const sandbox = await removeSandbox(SANDBOX_ROOT);
+  teardown = `，收尾：实例${childStopped ? "已退出" : "未确认退出"}、`
+    + `沙盒${sandbox.removed ? `已清理(${sandbox.attempts} 次)` : `残留(${sandbox.error})`}`;
+}
+console.log(`\n[http-mock-check] 失败 ${failures} 项 / 共 ${lines.length} 项`
+  + (externalBaseUrl
+    ? `（外部实例 ${baseUrl}）`
+    : `（自建实例 http://127.0.0.1:${APP_PORT}，沙盒 .codex-artifacts/http-mock-check${teardown}）`));
 process.exit(failures === 0 ? 0 : 1);

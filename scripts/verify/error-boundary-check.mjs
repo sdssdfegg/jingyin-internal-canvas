@@ -110,7 +110,7 @@ try {
     browserResult.reason = `本地 ${APP_PORT} 没有在跑，跳过浏览器部分`;
   } else {
     const { spawn } = await import("node:child_process");
-    const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+    const { mkdirSync, writeFileSync, unlinkSync } = await import("node:fs");
     const cli = path.join(process.env.LOCALAPPDATA || "", "Tabbit", "LocalAgent", "bin", "tabbit-cli.exe");
     if (!existsSync(cli)) {
       browserResult.reason = "tabbit-cli 不存在，跳过浏览器部分";
@@ -163,7 +163,9 @@ return await page.evaluate(async () => {
           ? { ran: true, payload }
           : { ran: false, reason: `浏览器回执无法解析（长度 ${stdout.length}）` };
       } finally {
-        try { rmSync(programFile, { force: true }); } catch { /* ignore */ }
+        // 用 unlinkSync 而不是 rmSync：工作区路径上的 rmSync 实测会静默无效，
+        // 临时程序文件会一直留在 .codex-artifacts 里。
+        try { unlinkSync(programFile); } catch { /* ignore */ }
       }
     }
   }

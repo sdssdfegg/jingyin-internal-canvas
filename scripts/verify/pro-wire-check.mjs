@@ -11,10 +11,11 @@
 // 用法：node scripts/verify/pro-wire-check.mjs
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync, readdirSync, rmSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, readdirSync, unlinkSync, mkdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import process from "node:process";
+import { freshSandbox, installExitCleanup, removeSandbox, stopChild } from "./lib/sandbox.mjs";
 
 const ROOT = process.cwd();
 const NODE = path.join(ROOT, "runtime", "node", "node.exe");
@@ -74,7 +75,8 @@ function cleanupFixtureHistory() {
   const deleted = new Set();
   const tryRemove = (name) => {
     try {
-      rmSync(path.join(imageDir, name));
+      // unlinkSync 而不是 rmSync：rmSync 在工作区路径上会静默无效（见 lib/sandbox.mjs）。
+      unlinkSync(path.join(imageDir, name));
       deleted.add(name);
     } catch { /* ignore */ }
   };
@@ -108,8 +110,9 @@ function countFixturePixels() {
 // 开跑前先扫一遍用户 data/：万一历史版本跑测试留下了 mock 测试图，顺手清掉，不让它累积。
 const preCleanup = cleanupFixtureHistory();
 // 准备测试实例自己的数据目录。
-rmSync(SANDBOX_ROOT, { recursive: true, force: true });
-mkdirSync(SANDBOX_ROOT, { recursive: true });
+freshSandbox(SANDBOX_ROOT);
+// 中途抛错时的兜底清理；正常路径在文件末尾显式收尾（要等进程真的退出）。
+installExitCleanup({ getChild: () => child, sandboxDir: SANDBOX_ROOT });
 
 const captured = [];
 let mockMode = "ok";
@@ -302,18 +305,9 @@ try {
 } catch (error) {
   results.push({ fatal: error instanceof Error ? error.message : String(error) });
 } finally {
-  if (child) child.kill();
+  await stopChild(child);
   mock.close();
 }
-
-// 等测试实例真的退出，再收尾：它在退出前还会往自己的数据目录里写一次。
-if (child && child.exitCode === null && child.signalCode === null) {
-  await new Promise((resolve) => {
-    const done = setTimeout(resolve, 8000);
-    child.once("exit", () => { clearTimeout(done); resolve(); });
-  });
-}
-await new Promise((resolve) => setTimeout(resolve, 300));
 
 // 收尾：测试实例自己的数据目录整个删掉（mock 图和 mock 历史条目都在里面）。
 // 同时再扫一次用户 data/，确认本次没往里写任何东西。
@@ -328,15 +322,7 @@ try {
   const parsed = JSON.parse(readFileSync(sandboxHistoryFile, "utf8"));
   if (Array.isArray(parsed)) sandboxHistoryEntries = parsed.length;
 } catch { /* ignore */ }
-const removeSandbox = () => {
-  try { rmSync(SANDBOX_ROOT, { recursive: true, force: true }); } catch { /* ignore */ }
-  return !existsSync(SANDBOX_ROOT);
-};
-let sandboxRemoved = removeSandbox();
-for (let attempt = 0; attempt < 4 && !sandboxRemoved; attempt += 1) {
-  await new Promise((resolve) => setTimeout(resolve, 600));
-  sandboxRemoved = removeSandbox();
-}
+const sandboxRemoved = await removeSandbox(SANDBOX_ROOT);
 const fixtureCleanup = {
   removed: cleanup.removed,
   files: cleanup.files,

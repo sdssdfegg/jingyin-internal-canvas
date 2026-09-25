@@ -12,9 +12,10 @@
 // 用法：node scripts/verify/history-repair-check.mjs
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { freshSandbox, installExitCleanup, removeSandbox, stopChild } from "./lib/sandbox.mjs";
 
 const ROOT = process.cwd();
 const NODE = path.join(ROOT, "runtime", "node", "node.exe");
@@ -46,22 +47,15 @@ const sha256 = (file) => createHash("sha256").update(readFileSync(file)).digest(
 const log = (file) => (existsSync(file) ? sha256(file) : "");
 
 function seedSandbox() {
-  rmSync(SANDBOX_ROOT, { recursive: true, force: true });
+  // 中途抛错时的兜底清理；正常路径在文件末尾显式收尾（要等进程真的退出）。
+  installExitCleanup({ getChild: () => child, sandboxDir: SANDBOX_ROOT });
+  // freshSandbox 是「真删 + 重建」：工作区路径上的 rmSync 会静默无效，
+  // 残留的 missing_1.png 会让"这个文件不存在"的种子失效（这个坑真实踩过）。
+  freshSandbox(SANDBOX_ROOT);
   mkdirSync(SANDBOX_IMAGES, { recursive: true });
-  // 上一轮结束时如果服务端句柄还没释放，rmSync 可能只删掉了部分文件。
-  // 残留的 missing_1.png 会让"这个文件不存在"的种子失效，所以这里显式清空一次。
-  for (const name of readdirSync(SANDBOX_IMAGES)) {
-    try { rmSync(path.join(SANDBOX_IMAGES, name), { force: true }); } catch { /* ignore */ }
-  }
-  for (const stale of [SANDBOX_HISTORY, SANDBOX_BACKUP, path.join(SANDBOX_DATA, "history.backup.json")]) {
-    try { rmSync(stale, { force: true }); } catch { /* ignore */ }
-  }
   // 只有 healthy_1 的归档文件真实存在
   writeFileSync(path.join(SANDBOX_IMAGES, "healthy_1.png"), PNG);
   mkdirSync(SANDBOX_REFERENCES, { recursive: true });
-  for (const name of readdirSync(SANDBOX_REFERENCES)) {
-    try { rmSync(path.join(SANDBOX_REFERENCES, name), { force: true }); } catch { /* ignore */ }
-  }
   // 参考图：只有 missing_1_ref_1 的缩略图还在
   writeFileSync(path.join(SANDBOX_REFERENCES, "keep_ref.png"), PNG);
   const entries = [
@@ -253,28 +247,17 @@ try {
 } catch (error) {
   results.push({ name: "fatal", pass: false, detail: error instanceof Error ? error.message : String(error) });
 } finally {
-  if (child) child.kill();
+  await stopChild(child);
 }
 
-if (child && child.exitCode === null && child.signalCode === null) {
-  await new Promise((resolve) => {
-    const done = setTimeout(resolve, 8000);
-    child.once("exit", () => { clearTimeout(done); resolve(); });
-  });
-}
-await new Promise((resolve) => setTimeout(resolve, 800));
+await new Promise((resolve) => setTimeout(resolve, 500));
 
 // ---- 8) 真实用户数据没被动过
 check("沙箱之外的真实 data/history.json 未被改动",
   log(REAL_HISTORY) === realHistoryBefore,
   `before=${realHistoryBefore.slice(0, 12)} after=${log(REAL_HISTORY).slice(0, 12)}`);
 
-let sandboxRemoved = false;
-for (let attempt = 0; attempt < 8 && !sandboxRemoved; attempt += 1) {
-  try { rmSync(SANDBOX_ROOT, { recursive: true, force: true }); } catch { /* ignore */ }
-  sandboxRemoved = !existsSync(SANDBOX_ROOT);
-  if (!sandboxRemoved) await new Promise((resolve) => setTimeout(resolve, 700));
-}
+const sandboxRemoved = await removeSandbox(SANDBOX_ROOT);
 
 const failed = results.filter((item) => !item.pass);
 console.log(JSON.stringify({
