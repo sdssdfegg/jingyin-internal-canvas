@@ -24,7 +24,11 @@ export const FORBIDDEN_CHANNEL_IDS = Object.freeze([
   "XBS-default",
   "silent-pro-line-03",
   "silent-banana-line-01",
-  "silent-tt2-line-08"
+  "silent-tt2-line-08",
+  // 2026-09-25：TT Image 2（2.0）的「WD-image特价」下线。
+  // 按上面的规则：目录里删掉，同时把它 3.0 展示名与 publicId 都记进拒绝名单。
+  "WD-image特价",
+  "silent-tt2-line-04"
 ]);
 
 const FORBIDDEN_CHANNEL_ID_SET = new Set(
@@ -54,7 +58,6 @@ export const DEFAULT_MAX_IMAGE_BYTES = 16 * 1024 * 1024;
 const ROUTING_CHANNELS = Object.freeze([
   { id: "silent-tt2-line-10", label: "云枢", price: 0.10, model: "tt-image-2" },
   { id: "silent-tt2-line-03", label: "XT-default", price: 0.10, model: "tt-image-2" },
-  { id: "silent-tt2-line-04", label: "WD-image特价", price: 0.10, model: "tt-image-2" },
   { id: "silent-tt2-line-05", label: "ZYG-default", price: 0.10, model: "tt-image-2" },
   { id: "silent-tt2-line-06", label: "ZYG-svip", price: 0.10, model: "tt-image-2" },
   { id: "silent-tt2-line-07", label: "ZYG-vip", price: 0.10, model: "tt-image-2" },

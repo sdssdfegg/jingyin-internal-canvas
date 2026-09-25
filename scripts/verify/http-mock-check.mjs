@@ -145,6 +145,22 @@ check(
   proChannels.join(",")
 );
 
+// 2026-09-25：2.0（tt-image-2）的 WD-image特价 下线；2.5 的 XT-image2-s / XT-特殊分组 保持可用
+const tt2ChannelRows = (routing.channels || [])
+  .filter((channel) => (channel.supportedModels || []).includes("tt-image-2"));
+check(
+  "2.0 目录里已无 WD-image特价（silent-tt2-line-04）",
+  !tt2ChannelRows.some((channel) => channel.id === "silent-tt2-line-04" || channel.label === "WD-image特价"),
+  tt2ChannelRows.map((channel) => channel.label).join(",")
+);
+const tt25ChannelRows = (routing.channels || [])
+  .filter((channel) => (channel.supportedModels || []).includes("tt-image-2.5"));
+for (const [id, label] of [["silent-tt25-line-01", "XT-image2-s"], ["silent-tt25-line-02", "XT-特殊分组"]]) {
+  const row = tt25ChannelRows.find((channel) => channel.id === id);
+  check(`2.5 目录里显示 ${label}`, Boolean(row) && row.label === label,
+    row ? `${row.id}/${row.label}` : tt25ChannelRows.map((channel) => channel.id).join(","));
+}
+
 // ------------------------------------------------- /api/images：旧 channelId 必须被拒
 const forbiddenCases = [
   ["WD-banana pro-特价", "forbidden"],
@@ -153,6 +169,7 @@ const forbiddenCases = [
   ["silent-pro-line-03", "forbidden"],
   ["silent-banana-line-01", "forbidden"],
   ["silent-tt2-line-08", "forbidden"],
+  ["silent-tt2-line-04", "forbidden"],
   ["silent-pro-line-10", "cross-model"]
 ];
 for (const [channelId, kind] of forbiddenCases) {
@@ -188,6 +205,25 @@ for (const [channelId, kind] of forbiddenCases) {
   const result = await json("/api/images", { method: "POST", body: form });
   check(
     "旧存档 nano-banana2 归一化后通过路由/能力校验（停在 missing_api_key）",
+    result.status === 400 && result.payload?.error === "missing_api_key",
+    `status=${result.status} error=${result.payload?.error}`
+  );
+}
+
+// ------------------- /api/images：2.5 的 XT-image2-s / XT-特殊分组 必须真的能被服务端接受
+// 同样故意不带 apiKey：missing_api_key 反证「通过了路由 + 能力校验」，且没有上游请求。
+for (const [channelId, label] of [["silent-tt25-line-01", "XT-image2-s"], ["silent-tt25-line-02", "XT-特殊分组"]]) {
+  const form = new FormData();
+  form.set("model", "tt-image-2.5");
+  form.set("channelId", channelId);
+  form.set("dispatchMode", "manual");
+  form.set("prompt", "mock 检查");
+  form.set("imageSize", "2K");
+  form.set("aspectRatio", "3:4");
+  form.append("image", tinyPng("mock.png"), "mock.png");
+  const result = await json("/api/images", { method: "POST", body: form });
+  check(
+    `2.5 的 ${label} 通过服务端路由/能力校验（停在 missing_api_key）`,
     result.status === 400 && result.payload?.error === "missing_api_key",
     `status=${result.status} error=${result.payload?.error}`
   );

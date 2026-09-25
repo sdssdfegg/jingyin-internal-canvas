@@ -29,12 +29,15 @@ function read(relative) {
 const FORBIDDEN_TOKENS = [
   "WD-banana pro-特价",
   "MC-限时特惠",
-  "XBS-default"
+  "XBS-default",
+  // 2026-09-25：TT Image 2（2.0）的 WD-image特价 下线
+  "WD-image特价"
 ];
 const FORBIDDEN_IDS = [
   "silent-pro-line-03",
   "silent-banana-line-01",
-  "silent-tt2-line-08"
+  "silent-tt2-line-08",
+  "silent-tt2-line-04"
 ];
 
 // ---------------------------------------------------------------- 静态扫描
@@ -196,6 +199,41 @@ const goodParams = channelModule.normalizeImageRequest({
   aspectRatio: "16:9"
 });
 check("合法 channelId 通过校验", channelModule.validateImageRouting(goodParams).ok === true);
+
+// ---------------------------------------------------------------- 2.0 / 2.5 渠道可用性（2026-09-25）
+// 2.0（TT Image 2）：WD-image特价 下线 → 目录里没有，服务端也拒绝
+const tt2Channels = routingModule.channelsForModel("tt-image-2", catalog);
+check("2.0 目录里已无 WD-image特价",
+  !tt2Channels.some((item) => item.id === "silent-tt2-line-04")
+    && !tt2Channels.some((item) => item.label === "WD-image特价"),
+  JSON.stringify(tt2Channels.map((item) => item.label)));
+const tt2RemovedParams = channelModule.normalizeImageRequest({
+  model: "tt-image-2", channelId: "silent-tt2-line-04", prompt: "x", imageSize: "2K", aspectRatio: "3:4"
+});
+const tt2RemovedResult = channelModule.validateImageRouting(tt2RemovedParams);
+check("2.0 用已下线的 WD-image特价 请求被服务端拒绝",
+  tt2RemovedResult.ok === false, tt2RemovedResult.code);
+
+// 2.5（TT Image 2.5）：XT-image2-s 与 XT-特殊分组 要能显示、也能通过服务端校验
+const tt25Channels = routingModule.channelsForModel("tt-image-2.5", catalog);
+for (const [id, label] of [["silent-tt25-line-01", "XT-image2-s"], ["silent-tt25-line-02", "XT-特殊分组"]]) {
+  const found = tt25Channels.find((item) => item.id === id);
+  check(`2.5 目录里显示 ${label}`,
+    Boolean(found) && found.label === label,
+    JSON.stringify(found || null));
+  const params = channelModule.normalizeImageRequest({
+    model: "tt-image-2.5", channelId: id, prompt: "x", imageSize: "2K", aspectRatio: "3:4"
+  });
+  const result2 = channelModule.validateImageRouting(params);
+  check(`2.5 的 ${label} 通过服务端路由校验`, result2.ok === true, result2.code);
+}
+
+// 老存档里选着已下线渠道时，必须能自动收敛到合法线路
+const legacyTt2 = routingModule.convergeSettingsForModel({ model: "tt-image-2", channelId: "silent-tt2-line-04" }, catalog);
+check("老存档选了已下线渠道 → 自动收敛到合法线路",
+  legacyTt2.channelId !== "silent-tt2-line-04"
+    && routingModule.channelsForModel("tt-image-2", catalog).some((item) => item.id === legacyTt2.channelId),
+  `channelId=${legacyTt2.channelId}`);
 
 // ---------------------------------------------------------------- 能力收敛
 const fakeCatalog = {
