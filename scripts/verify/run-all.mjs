@@ -35,6 +35,7 @@ const NODE = process.execPath; // 用当前运行时，保证与跑脚本的是�
 const ORDER = [
   "run-node-check",
   "image-host-allowlist-check",
+  "canvas-asset-check",
   "history-repair-check",
   "history-integrity-check",
   "local-edit-ratio-check",

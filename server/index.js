@@ -881,10 +881,6 @@ function referenceAssetUrl(filename) {
   return `/api/reference-asset/${encodeURIComponent(filename)}`;
 }
 
-function canvasAssetUrl(filename) {
-  return `/api/canvas-asset/${encodeURIComponent(filename)}`;
-}
-
 function historyImagePath(filename) {
   const safeName = path.basename(String(filename || ""));
   const resolved = path.resolve(historyImageDir, safeName);
@@ -4179,6 +4175,9 @@ app.post("/api/canvas-assets", upload.array("image", 12), async (req, res) => {
     }
 
     const createdAt = Date.now();
+    // 现在直接回 data URL：前端把画布资源随请求带上就行，不需要服务端落盘。
+    // （旧实现是写 data/canvas-assets 再回 /api/canvas-asset/xxx；那段代码已经删掉，
+    //  但 GET /api/canvas-asset/:filename 路由保留，用于兼容历史链接。）
     return res.json({
       ok: true,
       assets: files.map((file, index) => {
@@ -4194,25 +4193,6 @@ app.post("/api/canvas-assets", upload.array("image", 12), async (req, res) => {
         };
       })
     });
-
-    void canvasAssetDir;
-    const assets = [];
-    for (const [index, file] of files.entries()) {
-      const ext = imageExtensionFromType(file.mimetype, file.originalname);
-      const filename = `canvas_${createdAt}_${index}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      void canvasAssetPath;
-      assets.push({
-        id: `canvas_asset_${createdAt}_${index}`,
-        name: file.originalname || `canvas-${index + 1}.${ext}`,
-        filename,
-        url: canvasAssetUrl(filename),
-        mimeType: file.mimetype || mimeTypeFromFile(filename),
-        size: file.size,
-        createdAt: createdAt + index
-      });
-    }
-
-    res.json({ ok: true, assets });
   } catch (error) {
     res.status(400).json({
       ok: false,
