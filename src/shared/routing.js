@@ -55,7 +55,10 @@ export const HIDDEN_CHANNEL_IDS = Object.freeze([
   // 2.0（TT Image 2）的 ZYG 三条
   "silent-tt2-line-05",
   "silent-tt2-line-06",
-  "silent-tt2-line-07"
+  "silent-tt2-line-07",
+  // 2026-09-26：香蕉 2（banana-2）的「云枢」前端隐藏（服务端目录/校验照旧认）。
+  // 香蕉 2 白名单原本两条（Subdirect / 云枢），隐藏后前端只剩 Subdirect。
+  "silent-banana-line-07"
 ]);
 
 const HIDDEN_CHANNEL_ID_SET = new Set(

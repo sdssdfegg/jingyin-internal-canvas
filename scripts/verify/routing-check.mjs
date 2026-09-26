@@ -125,14 +125,24 @@ for (const token of [...FORBIDDEN_TOKENS, ...FORBIDDEN_IDS]) {
 }
 
 // ---------------------------------------------------------------- 线路白名单
+// 2026-09-26：香蕉 2 的云枢改成**前端隐藏**，所以白名单仍有两条（服务端照旧认），
+// 但前端 channelsForModel 只剩 Subdirect —— 下面两条分别断言"白名单"和"前端可见"。
+const bananaAllowlist = routingModule.MODEL_CHANNEL_ALLOWLIST["banana-2"];
 const bananaChannels = routingModule.channelsForModel("banana-2", catalog);
 check(
-  "香蕉 2 只有 Subdirect 和云枢",
-  bananaChannels.length === 2
+  "香蕉 2 白名单仍是 Subdirect + 云枢（服务端口径不变）",
+  bananaAllowlist.length === 2
+    && bananaAllowlist[0].id === "silent-banana-line-08"
+    && bananaAllowlist[0].label === "Subdirect"
+    && bananaAllowlist[1].id === "silent-banana-line-07"
+    && bananaAllowlist[1].label === "云枢",
+  JSON.stringify(bananaAllowlist.map((item) => [item.id, item.label, item.price]))
+);
+check(
+  "香蕉 2 前端只剩 Subdirect（云枢已隐藏）",
+  bananaChannels.length === 1
     && bananaChannels[0].id === "silent-banana-line-08"
-    && bananaChannels[0].label === "Subdirect"
-    && bananaChannels[1].id === "silent-banana-line-07"
-    && bananaChannels[1].label === "云枢",
+    && bananaChannels[0].label === "Subdirect",
   JSON.stringify(bananaChannels.map((item) => [item.id, item.label, item.price]))
 );
 
@@ -262,6 +272,32 @@ const legacyZyg = routingModule.convergeSettingsForModel({ model: "tt-image-2", 
 check("老存档选着被隐藏的 ZYG → 落到未隐藏的合法线路（界面与请求保持一致）",
   !HIDDEN_IDS.includes(legacyZyg.channelId) && tt2Visible.some((item) => item.id === legacyZyg.channelId),
   `channelId=${legacyZyg.channelId}`);
+
+// 2026-09-26：香蕉 2 的「云枢」（silent-banana-line-07）也是前端隐藏。
+const BANANA_HIDDEN_ID = "silent-banana-line-07";
+const bananaVisible = routingModule.channelsForModel("banana-2", catalog);
+check("香蕉 2 的「云枢」在前端菜单里消失（白名单两条 → 只剩 Subdirect）",
+  bananaVisible.length === 1
+    && bananaVisible[0].id === "silent-banana-line-08"
+    && !bananaVisible.some((item) => item.id === BANANA_HIDDEN_ID),
+  JSON.stringify(bananaVisible.map((item) => `${item.id}:${item.label}`)));
+check("香蕉 2 云枢是「前端隐藏」而不是「下架」（服务端目录里还在、也不是禁用名单）",
+  routingModule.isHiddenChannelId(BANANA_HIDDEN_ID)
+    && !routingModule.isForbiddenChannelId(BANANA_HIDDEN_ID)
+    && (catalog.channels || []).some((channel) => channel.id === BANANA_HIDDEN_ID),
+  "isHidden=true / isForbidden=false / 目录仍在");
+{
+  const bananaRoute = routingModule.routingFields("banana-2", BANANA_HIDDEN_ID, catalog);
+  check("用旧 channelId 选云枢 → 收敛到剩余合法线路（界面与请求一致）",
+    bananaRoute.channelId === "silent-banana-line-08",
+    `channelId=${bananaRoute.channelId}`);
+  const params = channelModule.normalizeImageRequest({
+    model: "banana-2", channelId: BANANA_HIDDEN_ID, prompt: "x", imageSize: "2K", aspectRatio: "3:4"
+  });
+  check("服务端仍然接受香蕉 2 云枢（与「删除」不同）",
+    channelModule.validateImageRouting(params).ok === true,
+    channelModule.validateImageRouting(params).code);
+}
 
 // ---------------------------------------------------------------- 能力收敛
 const fakeCatalog = {
