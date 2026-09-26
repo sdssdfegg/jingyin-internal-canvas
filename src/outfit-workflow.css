@@ -2631,16 +2631,20 @@
   z-index: 8;
   display: grid;
   gap: 8px;
-  max-height: min(48vh, 336px);
+  /* 2026-09-26（按用户反馈）：这一块是"冻结区"，永远贴在底部、不跟着内容滚。
+     原来给了 max-height + overflow:auto + scrollbar-gutter:stable，于是右侧同时出现
+     两条滚动条（实测自然高 353px、上限 336px，只差 17px 也照样常驻一条滚动槽）。
+     现在改为按内容自然高度铺开、不产生自己的滚动条 —— 整页只保留主内容区那一条。 */
+  max-height: none;
   margin-top: 10px;
   margin-bottom: 0;
   padding: 10px;
-  overflow: auto;
+  overflow: visible;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel-bg);
   box-shadow: 0 -14px 28px rgba(0, 0, 0, 0.22);
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
 }
 
 .outfitWorkflowEmbedded .localDetailPageDockPanel {
@@ -2661,7 +2665,7 @@
 .outfitWorkflowEmbedded .outfitScrollArea {
   order: 2;
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 200px;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;

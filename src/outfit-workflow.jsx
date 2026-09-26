@@ -7071,7 +7071,6 @@ export default function OutfitWorkflow({
   const [imageFactsAnalyzing, setImageFactsAnalyzing] = useState(false);
   const [wearingDetailOpen, setWearingDetailOpen] = useState(false);
   const [factsDetailOpen, setFactsDetailOpen] = useState(false);
-  const [intentPreviewOpen, setIntentPreviewOpen] = useState(false);
   const [inlineMessage, setInlineMessage] = useState("");
   const [, setEvents] = useState([]);
   const [clockNow, setClockNow] = useState(Date.now());
@@ -10960,6 +10959,25 @@ function buildTasks(countOverride = plannedGenerationCount) {
             />
           </label>
 
+          {/* 2026-09-26（按用户反馈）：换装设置一改，这里立刻显示"真正会发出去的完整提示词"。
+              只读、常显、不需要点按钮 —— 客户一眼就能看到自己选的东西变成了什么。
+              这个框本身必须保持可编辑（那是用户的补充要求），所以实际的编译结果放在它正下方，
+              不能反过来把编译结果写进输入框，否则用户一打字就被覆盖。 */}
+          {isOutfitWorkflow && (
+            <section className="outfitLivePrompt" aria-label="实际发送的完整提示词">
+              <header>
+                <strong>实际发送的完整提示词</strong>
+                <span>随上面的换装设置实时更新 · 共 {outfitPreview.chars} 字（自动内容 {outfitPreview.autoChars}/{OUTFIT_AUTO_PROMPT_CHAR_LIMIT} 字）</span>
+              </header>
+              <pre>{outfitPreview.prompt}</pre>
+              <small>
+                「{promptFieldTitle}」里写的是你的补充要求，原样进【用户补充】；
+                下面这段是「换装设置 + 图2服装事实」编译出来的完整内容，也是服务端最终发送的内容
+                （服务端用同一个编译器，并会再补入智能介入文本）。
+              </small>
+            </section>
+          )}
+
           <label className="composerField composerNote">
             <span>{productNoteFieldTitle}</span>
             <DebouncedTextarea
@@ -10971,7 +10989,7 @@ function buildTasks(countOverride = plannedGenerationCount) {
           </label>
 
           <div className="composerStickyControls">
-            {/* 提交按钮附近的紧凑摘要 + 真实最终提示词预览（预览来自同一个编译器，不是另写的展示文案）。 */}
+            {/* 提交按钮旁的一行摘要（完整提示词在「通用换装提示词」下面常显，不用再点开）。 */}
             {isOutfitWorkflow && (
               <div className="outfitIntentBar">
                 <span className="outfitIntentBarText">
@@ -10980,19 +10998,6 @@ function buildTasks(countOverride = plannedGenerationCount) {
                   <em>｜</em>穿法：{outfitIntentSummary.wearingText}
                 </span>
                 <span className="outfitIntentBarChars">{outfitPreview.autoChars}/{OUTFIT_AUTO_PROMPT_CHAR_LIMIT} 字</span>
-                <button className="imageFactToggle" type="button" onClick={() => setIntentPreviewOpen((value) => !value)} aria-expanded={intentPreviewOpen}>
-                  {intentPreviewOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                  <span>{intentPreviewOpen ? "收起最终提示词" : "查看本次最终提示词"}</span>
-                </button>
-              </div>
-            )}
-            {isOutfitWorkflow && intentPreviewOpen && (
-              <div className="outfitIntentPreview">
-                <pre>{outfitPreview.prompt}</pre>
-                <small>
-                  共 {outfitPreview.chars} 字（自动内容 {outfitPreview.autoChars} 字；建议不超过 {OUTFIT_AUTO_PROMPT_CHAR_LIMIT} 字）。
-                  这是本地预编译结果；服务端会用同一个编译器、并补入智能介入文本后再发送给模型。
-                </small>
               </div>
             )}
             <div className="composerFooter">

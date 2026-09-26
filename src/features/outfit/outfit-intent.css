@@ -273,18 +273,37 @@
   font-size: 11px;
 }
 
-.outfitWorkflowEmbedded .outfitIntentPreview {
+/* 「通用换装提示词」下面的常显实时编译结果：换装设置一改就跟着变，不需要点开。 */
+.outfitWorkflowEmbedded .outfitLivePrompt {
   display: grid;
   gap: 6px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, #fbbf24 32%, var(--border));
+  border-radius: 8px;
   background: color-mix(in srgb, var(--panel-strong) 46%, transparent);
 }
 
-.outfitWorkflowEmbedded .outfitIntentPreview pre {
+.outfitWorkflowEmbedded .outfitLivePrompt > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .outfitLivePrompt > header strong {
+  color: #fbbf24;
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .outfitLivePrompt > header span {
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.outfitWorkflowEmbedded .outfitLivePrompt pre {
   margin: 0;
-  max-height: 220px;
+  max-height: 200px;
   overflow: auto;
   color: var(--text);
   font-family: inherit;
@@ -292,4 +311,10 @@
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.outfitWorkflowEmbedded .outfitLivePrompt small {
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1.5;
 }
