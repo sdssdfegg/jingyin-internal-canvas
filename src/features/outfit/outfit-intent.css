@@ -4,7 +4,16 @@
  * 不塞进已经很大的 outfit-workflow.css，避免和其它分区样式互相影响。
  * 只在 isOutfitWorkflow 时渲染对应 DOM，其它分区不受影响。 */
 
+/* ⚠️ 顺序：`.outfitScrollArea` 是 flex 纵向容器，里面几个面板靠 `order` 排序
+   （见 outfit-workflow.css）：
+     结果图 .resultPanel         order 1
+     图1~图3 .assetGrid          order 2
+     换装设置 .outfitIntentPanel  order 3   ← 本文件
+     原图库 .originalLibraryPanel order 4
+   提示词 .composerPanel 在 `.outfitScrollArea` 之外、外层 order 3，所以永远在这整块下面。
+   这里必须显式写 order：不写就是 0，会跑到结果图和上传区上面去（2026-09-26 实测踩过）。 */
 .outfitWorkflowEmbedded .outfitIntentPanel {
+  order: 3;
   display: grid;
   gap: 10px;
   padding: 12px;
