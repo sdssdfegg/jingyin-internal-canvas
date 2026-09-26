@@ -55,6 +55,7 @@ import {
 import { createDetailAiPlan } from "./detail-ai.js";
 import { buildDetailPromptGroup as buildDetailPromptGroupV2 } from "./detail-middleware.js";
 import { buildOutfitPrompt, primaryOutfitGenerationError } from "./outfit-skill.js";
+import { validateOutfitIntent } from "../src/shared/outfit-intent.js";
 import { createOutfitMasterFitSpec } from "./outfit-master-fit-ai.js";
 import { createOutfitQualityCheck } from "./outfit-quality-ai.js";
 import { createOutfitPoseAnchor } from "./outfit-pose-ai.js";
@@ -4574,6 +4575,27 @@ app.post("/api/generate-outfit", wrapOutfitUpload(imageForwardUpload.fields([
     });
   }
 
+  // 结构化换装意图：服务端权威校验。
+  // 必须在智能介入之前 —— 非法枚举不能等到可能真实扣费的那一步才拒绝。
+  // 只有"批量换装"带 outfitIntent 时才校验/收敛；其它 workflow 不带这个字段，行为不变。
+  if (payload.outfitIntent !== undefined) {
+    const intentCheck = validateOutfitIntent(payload.outfitIntent);
+    if (!intentCheck.ok) {
+      await removeUploadedFiles(req.files);
+      return res.status(400).json({
+        ok: false,
+        error: "invalid_outfit_intent",
+        message: `换装设置不合法：${intentCheck.errors[0]}`,
+        errors: intentCheck.errors
+      });
+    }
+    if (String(payload.workflowMode || "") === "outfit") {
+      // 用归一化后的意图覆盖，后面 buildOutfitPrompt() 只认这一份。
+      payload = { ...payload, outfitIntent: intentCheck.intent };
+      promptPayload = payload;
+    }
+  }
+
   // 路由 + 能力校验必须排在智能介入之前。
   // 智能介入会带服务器 KEY 调上游（可能真实扣费），旧 channelId 不能等到那之后才拒绝。
   const preflightParams = normalizeImageRequest({
@@ -5109,27 +5131,11 @@ app.post("/api/outfit-master-fit-analysis", upload.single("image"), async (req, 
       mode: result.mode,
       timingMs: Date.now() - receivedAt,
       source: result.source,
-      spec: result.masterFitSpec,
-      promptBlock: result.promptBlock,
-      fields: {
-        garmentCategory: result.garmentCategory,
-        silhouette: result.silhouette,
-        shoulderNeckline: result.shoulderNeckline,
-        sleeveCuff: result.sleeveCuff,
-        sleeveWearing: result.sleeveWearing,
-        closureState: result.closureState,
-        buttonCountState: result.buttonCountState,
-        zipperBeltState: result.zipperBeltState,
-        necklineOpening: result.necklineOpening,
-        tuckDrape: result.tuckDrape,
-        waistFit: result.waistFit,
-        upperHem: result.upperHem,
-        lowerHem: result.lowerHem,
-        material: result.material,
-        details: result.details,
-        wearingDriftBan: result.wearingDriftBan,
-        driftBan: result.driftBan
-      }
+      // 2026-09-26：只返回结构化服装事实。
+      // 原来的 spec / promptBlock（整段母版提示词）已删除 —— 分析结果必须先转结构化数据，
+      // 再由 src/shared/outfit-intent.js 的唯一编译器按选中部位插进最终提示词，
+      // 不允许再把一整段文本直接拼进生图提示词。
+      facts: result.facts
     });
   } catch (error) {
     const rawMessage = error?.name === "AbortError"

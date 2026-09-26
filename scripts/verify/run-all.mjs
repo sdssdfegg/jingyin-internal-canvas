@@ -54,6 +54,11 @@ const ORDER = [
   "ui-duplication-check",
   "modal-shell-check",
   "quickgen-prompt-passthrough-check",
+  // 2026-09-26：批量换装结构化意图 + 唯一精简提示词编译器。
+  // 前者是纯逻辑断言（七种部位组合 / 层级 / 穿法 / 事实过滤 / 字符数）；
+  // 后者用本地 mock 上游钉住"结构化意图真的进了发给模型的最终提示词"。
+  "outfit-intent-check",
+  "outfit-intent-request-check",
   "lint-ratchet-check",
   "run-all-check",
   "check-launcher"

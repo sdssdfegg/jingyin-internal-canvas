@@ -4,6 +4,8 @@ import {
   Brush,
   Check,
   CheckSquare,
+  ChevronDown,
+  ChevronUp,
   Crop,
   Download,
   Eye,
@@ -79,6 +81,23 @@ import { getAppConfig } from "./api/config.js";
 import { formatConnectionResult, testConnection } from "./api/connection.js";
 import { describeEmptyResult, formatGenerationError, sanitizeErrorText } from "./shared/generation-errors.js";
 import { brokenImageReason, resultImageCardState } from "./shared/result-image.js";
+// 结构化换装意图 + 唯一精简提示词编译器（前端预览与服务端发送同一份实现）。
+import {
+  FACT_UNRECOGNIZED,
+  OUTFIT_AUTO_PROMPT_CHAR_LIMIT,
+  OUTFIT_FACT_FIELDS,
+  OUTFIT_PART_OPTIONS,
+  UPPER_LAYER_OPTIONS,
+  WEARING_MODE_OPTIONS,
+  compileOutfitPrompt,
+  defaultOutfitIntent,
+  normalizeOutfitIntent,
+  recognizedFactKeys,
+  resolveUpperLayer,
+  summarizeOutfitIntent,
+  validateOutfitIntent,
+  visibleWearingFields
+} from "./shared/outfit-intent.js";
 import {
   getSaveDirectory,
   openSaveDirectoryRequest,
@@ -94,6 +113,7 @@ import { normalizeApiKeyInput } from "./features/auth/api-key.js";
 import { fileSize, formatWholeSecondMs as formatMs } from "./lib/format/index.js";
 import { readJsonStorage, removeStorageItem, writeJsonStorage } from "./lib/storage/json-storage.js";
 import "./outfit-workflow.css";
+import "./features/outfit/outfit-intent.css";
 
 const STORAGE_KEY = "jingyin-outfit-workflow-settings-v1";
 const BATCH_CONCURRENCY_DEFAULT_MIGRATION_KEY = "batchConcurrencyDefaultV5Applied";
@@ -414,6 +434,8 @@ const GARMENT_PART_OPTIONS = [
   { value: "lower", label: "下装" },
   { value: "shoes", label: "鞋子" }
 ];
+// 2026-09-26：`GARMENT_COMPOSITION_OPTIONS` / `GARMENT_PART_PRESET_OPTIONS`（单件上衣 /
+// 外套+内搭 / 套装）只服务"批量改色"的改色范围，批量换装不再使用这套旧式顶层切换。
 const GARMENT_COMPOSITION_OPTIONS = [
   { value: "single-upper", label: "单件上衣", parts: ["upper"] },
   { value: "upper-layer", label: "外套+内搭", parts: ["upper"] },
@@ -427,22 +449,6 @@ const GARMENT_PART_PRESET_OPTIONS = [
 ];
 const DEFAULT_GARMENT_PARTS = ["upper"];
 const DEFAULT_GARMENT_COMPOSITION = "single-upper";
-const GARMENT_LENGTH_OPTIONS = [
-  { value: "", label: "不触发" },
-  { value: "reference", label: "按图2原长度" },
-  { value: "waist", label: "到腰线" },
-  { value: "below-waist", label: "到腰下" },
-  { value: "upper-hip", label: "到臀上" },
-  { value: "cover-hip", label: "遮臀" },
-  { value: "mid-thigh", label: "到大腿中段" },
-  { value: "above-knee", label: "到膝上" },
-  { value: "knee", label: "到膝盖" },
-  { value: "below-knee", label: "到膝下" },
-  { value: "mid-calf", label: "到小腿中段" },
-  { value: "ankle", label: "到脚踝" },
-  { value: "floor", label: "拖地" }
-];
-const DEFAULT_GARMENT_LENGTHS = { upper: "", lower: "" };
 
 const BATCH_RATIO_OPTIONS = ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9"];
 const RESIZE_RESOLUTION_OPTIONS = [
@@ -912,38 +918,9 @@ function garmentCompositionLabel(value) {
   return GARMENT_COMPOSITION_OPTIONS.find((option) => option.value === value)?.label || "自定义范围";
 }
 
-function normalizeGarmentLengths(value = {}, garmentParts = DEFAULT_GARMENT_PARTS) {
-  const allowed = new Set(GARMENT_LENGTH_OPTIONS.map((option) => option.value));
-  const parts = normalizeGarmentParts(garmentParts);
-  const next = {
-    upper: allowed.has(value?.upper) ? value.upper : "",
-    lower: allowed.has(value?.lower) ? value.lower : ""
-  };
-  if (!parts.includes("upper")) next.upper = "";
-  if (!parts.includes("lower")) next.lower = "";
-  return next;
-}
-
-function normalizeMasterFitLock(value) {
-  if (value === true) return true;
-  if (value === false) return false;
-  const text = String(value ?? "false").trim().toLowerCase();
-  return ["1", "true", "on", "lock", "母版", "锁版型", "开启"].includes(text);
-}
-
-function normalizeMasterFitSpec(value) {
-  return String(value || "")
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .trim()
-    .slice(0, 2600);
-}
-
-// 中文注释：记录规格对应的图2图片 ID，避免更换固定服装后继续误用旧母版规格。
-function normalizeMasterFitSourceId(value) {
-  return String(value || "").trim().slice(0, 120);
-}
-
+// 2026-09-26：原来的「母版锁版型」三件套（masterFitLock / masterFitSpec / masterFitSourceId）
+// 已删除 —— 它锁的是一整段母版提示词，而那段提示词从来没进过服务端最终提示词（死逻辑）。
+// 现在图2的结论统一走 `outfitIntent.facts`（结构化服装事实），由唯一编译器插入提示词。
 const RANDOM_BACKGROUND_FOCUS_OPTIONS = [
   { value: "default", label: "默认" },
   { value: "upper", label: "上衣" },
@@ -971,12 +948,11 @@ const defaultSettings = {
   generationCount: "auto",
   smartIntervention: false,
   qualityCheck: false,
+  // 批量改色的改色范围（旧机制，只有 recolor 还在用）。
   garmentParts: DEFAULT_GARMENT_PARTS,
   garmentComposition: DEFAULT_GARMENT_COMPOSITION,
-  garmentLengths: DEFAULT_GARMENT_LENGTHS,
-  masterFitLock: false,
-  masterFitSpec: "",
-  masterFitSourceId: "",
+  // 批量换装的结构化意图（唯一来源）：更换部位 / 上装层级 / 穿法 / 图2服装事实。
+  outfitIntent: defaultOutfitIntent(),
   pairingMode: "fixed",
   preprocessMode: DEFAULT_PREPROCESS_MODE,
   randomBackgroundFocus: "default",
@@ -1003,10 +979,7 @@ function readSettings() {
     settings.qualityCheck = normalizeQualityCheck(settings.qualityCheck);
     settings.garmentParts = normalizeGarmentParts(settings.garmentParts);
     settings.garmentComposition = normalizeGarmentComposition(settings.garmentComposition, settings.garmentParts);
-    settings.garmentLengths = normalizeGarmentLengths(settings.garmentLengths, settings.garmentParts);
-    settings.masterFitLock = normalizeMasterFitLock(settings.masterFitLock);
-    settings.masterFitSpec = normalizeMasterFitSpec(settings.masterFitSpec);
-    settings.masterFitSourceId = normalizeMasterFitSourceId(settings.masterFitSourceId);
+    settings.outfitIntent = normalizeOutfitIntent(settings.outfitIntent);
     settings.randomBackgroundFocus = normalizeRandomBackgroundFocus(settings.randomBackgroundFocus);
     settings.concurrency = normalizeBatchConcurrency(settings.concurrency);
     settings.preprocessMode = DEFAULT_PREPROCESS_MODE;
@@ -1251,10 +1224,9 @@ function normalizeOutfitPageSettings(value = {}, options = {}) {
   settings.qualityCheck = normalizeQualityCheck(settings.qualityCheck);
   settings.garmentParts = normalizeGarmentParts(settings.garmentParts);
   settings.garmentComposition = normalizeGarmentComposition(settings.garmentComposition, settings.garmentParts);
-  settings.garmentLengths = normalizeGarmentLengths(settings.garmentLengths, settings.garmentParts);
-  settings.masterFitLock = normalizeMasterFitLock(settings.masterFitLock);
-  settings.masterFitSpec = normalizeMasterFitSpec(settings.masterFitSpec);
-  settings.masterFitSourceId = normalizeMasterFitSourceId(settings.masterFitSourceId);
+  // 旧存档里的 garmentParts / garmentComposition / garmentLengths / masterFit* 只做安全读取：
+  // 它们留在对象里不报错，但不再影响批量换装的任何行为，也不会覆盖新的 outfitIntent。
+  settings.outfitIntent = normalizeOutfitIntent(settings.outfitIntent);
   settings.randomBackgroundFocus = normalizeRandomBackgroundFocus(settings.randomBackgroundFocus);
   settings.concurrency = normalizeBatchConcurrency(settings.concurrency);
   settings.theme = normalizeTheme(settings.theme);
@@ -1473,7 +1445,6 @@ function makeRecolorPage(baseSettings = readSettings(), patch = {}) {
       pairingMode: "fixed",
       garmentParts: DEFAULT_GARMENT_PARTS,
       garmentComposition: DEFAULT_GARMENT_COMPOSITION,
-      garmentLengths: DEFAULT_GARMENT_LENGTHS,
       ...(patch.settings || {})
     },
     uploadLabels: patch.uploadLabels || RECOLOR_UPLOAD_LABELS
@@ -7096,9 +7067,11 @@ export default function OutfitWorkflow({
   const [originalLibrary, setOriginalLibrary] = useState(() => initialOutfitPage.originalLibrary || []);
   const [imageLightbox, setImageLightbox] = useState(null);
   const [running, setRunning] = useState(false);
-  const [masterFitAnalyzing, setMasterFitAnalyzing] = useState(false);
-  const [masterFitPromptOpen, setMasterFitPromptOpen] = useState(false);
-  const [masterFitPromptDraft, setMasterFitPromptDraft] = useState("");
+  // 图2服装事实：分析中状态 + "展开详细穿法/事实"的折叠开关（默认只显示紧凑摘要）。
+  const [imageFactsAnalyzing, setImageFactsAnalyzing] = useState(false);
+  const [wearingDetailOpen, setWearingDetailOpen] = useState(false);
+  const [factsDetailOpen, setFactsDetailOpen] = useState(false);
+  const [intentPreviewOpen, setIntentPreviewOpen] = useState(false);
   const [inlineMessage, setInlineMessage] = useState("");
   const [, setEvents] = useState([]);
   const [clockNow, setClockNow] = useState(Date.now());
@@ -7169,7 +7142,6 @@ export default function OutfitWorkflow({
   const isCustomWorkflow = workflowMode === "custom";
   const isPoseRemixWorkflow = workflowMode === "pose-remix";
   const isOutfitWorkflow = workflowMode === "outfit";
-  const usesGarmentScopeControls = isOutfitWorkflow || isRecolorWorkflow;
   const canAppendWhileRunning = true;
   const activePageDeleteLocked = Boolean(activeOutfitPage.deleteLocked);
   const models = config.models?.length ? config.models : DEFAULT_MODELS;
@@ -7184,17 +7156,17 @@ export default function OutfitWorkflow({
   const activeModels = modelImages.filter((item) => item.selected);
   const activeClothes = clothingImages.filter((item) => item.selected);
   const selectedFixedClothing = clothingImages.find((item) => item.id === fixedClothingId) || activeClothes[0] || clothingImages[0];
-  const masterFitLockReady = isOutfitWorkflow
-    && settings.pairingMode === "fixed"
-    && Boolean(selectedFixedClothing?.id)
-    && normalizeMasterFitLock(settings.masterFitLock)
-    && Boolean(normalizeMasterFitSpec(settings.masterFitSpec))
-    && normalizeMasterFitSourceId(settings.masterFitSourceId) === selectedFixedClothing.id;
+  // 批量改色的改色范围（只有 recolor 还在用这套旧机制）。
   const selectedGarmentParts = normalizeGarmentParts(settings.garmentParts);
   const selectedGarmentComposition = normalizeGarmentComposition(settings.garmentComposition, selectedGarmentParts);
-  const activeGarmentLengths = normalizeGarmentLengths(settings.garmentLengths, selectedGarmentParts);
-  const upperLengthEnabled = selectedGarmentParts.includes("upper");
-  const lowerLengthEnabled = selectedGarmentParts.includes("lower");
+  // 批量换装的结构化意图（唯一来源）。
+  const outfitIntent = normalizeOutfitIntent(settings.outfitIntent);
+  const outfitLayer = resolveUpperLayer(outfitIntent);
+  const outfitIntentSummary = summarizeOutfitIntent(outfitIntent);
+  const outfitWearingFieldList = visibleWearingFields(outfitIntent);
+  const outfitRecognizedFacts = recognizedFactKeys(outfitIntent.facts);
+  // 最终提示词预览：与提交时服务端用的是同一个编译器（服务端还会再补智能介入文本并做权威校验）。
+  const outfitPreview = compileOutfitPrompt({ intent: outfitIntent, userPrompt: settings.prompt, productNote: settings.productNote });
   const completedCount = tasks.filter((task) => task.status === "success").length;
   const failedCount = tasks.filter((task) => task.status === "failed").length;
   const runningCount = tasks.filter((task) => task.status === "running").length;
@@ -7662,9 +7634,6 @@ export default function OutfitWorkflow({
   }, [preview, resultPreviewTasks]);
 
   function updateSetting(key, value) {
-    if (key === "pairingMode" && value !== "fixed" && (settings.masterFitLock || settings.masterFitSpec)) {
-      invalidateMasterFitLock("切换为一一对应或循环配对，母版锁定已关闭");
-    }
     if (key === "model") {
       // 切换模型时按新模型的 capabilities 重新收敛比例 / 尺寸 / 生成数量 / 线路。
       setSettings((current) => convergeSettingsForModel(
@@ -7687,10 +7656,7 @@ export default function OutfitWorkflow({
       if (key === "qualityCheck") return normalizeQualityCheck(value);
       if (key === "garmentParts") return normalizeGarmentParts(value);
       if (key === "garmentComposition") return normalizeGarmentComposition(value, current.garmentParts);
-      if (key === "garmentLengths") return normalizeGarmentLengths(value, current.garmentParts);
-      if (key === "masterFitLock") return normalizeMasterFitLock(value);
-      if (key === "masterFitSpec") return normalizeMasterFitSpec(value);
-      if (key === "masterFitSourceId") return normalizeMasterFitSourceId(value);
+      if (key === "outfitIntent") return normalizeOutfitIntent(value);
       return value;
     };
     setSettings((current) => {
@@ -7714,68 +7680,27 @@ export default function OutfitWorkflow({
         });
   }
 
-  // 中文注释：清除母版规格只用于删除/清空母版图；替换图2时保留用户已调好的提示词。
-  function invalidateMasterFitLock(detail = "") {
-    setSettings((current) => ({
-      ...current,
-      masterFitLock: false,
-      masterFitSpec: "",
-      masterFitSourceId: ""
-    }));
-    if (detail) addEvent("母版版型", detail);
-  }
-
-  function pauseMasterFitLock(detail = "") {
-    setSettings((current) => ({
-      ...current,
-      masterFitLock: false
-    }));
-    if (detail) addEvent("母版版型", detail);
-  }
-
-  // 中文注释：只有固定服装且已有当前图2规格时，才允许把母版版型作为硬约束发送给后端。
-  function toggleMasterFitLock() {
-    if (settings.masterFitLock) {
-      updateSetting("masterFitLock", false);
-      addEvent("母版版型", "已关闭母版锁定");
-      return;
-    }
-    if (!selectedFixedClothing) {
-      addEvent("母版版型", "请先上传并设定一张固定图2");
-      return;
-    }
-    if (settings.pairingMode !== "fixed") {
-      addEvent("母版版型", "母版锁定只用于固定服装配对");
-      return;
-    }
-    if (!settings.masterFitSpec || settings.masterFitSourceId !== selectedFixedClothing.id) {
-      addEvent("母版版型", "请先分析当前固定图2母版");
-      return;
-    }
-    updateSetting("masterFitLock", true);
-    addEvent("母版版型", "已锁定当前图2版型");
-  }
-
-  // 中文注释：调用服务端视觉分析当前固定图2，把一次性分析结果写入当前页面设置。
-  async function analyzeMasterFit() {
-    if (masterFitAnalyzing) return;
+  // 中文注释：把图2分析结果（结构化服装事实）写进当前页面的 outfitIntent。
+  // 分析失败只提示，不清空用户已有的手动选择，也不让整批失效。
+  async function analyzeImageFacts() {
+    if (imageFactsAnalyzing) return;
     if (!effectiveApiKey) {
-      addEvent("母版分析", "请先填写 API Key");
+      addEvent("图2分析", "请先填写 API Key");
       openSettings();
       return;
     }
-    if (!selectedFixedClothing?.file) {
-      addEvent("母版分析", "请先上传并设定一张固定图2");
+    const source = selectedFixedClothing;
+    if (!source?.file) {
+      addEvent("图2分析", "请先上传并选中一张图2服装图");
       return;
     }
-    if (settings.pairingMode !== "fixed") {
-      addEvent("母版分析", "请先切换为固定服装配对");
+    if (outfitIntent.parts.length === 0) {
+      addEvent("图2分析", "请先在「更换部位」里至少选择一个部位，分析才会只提取相关事实");
       return;
     }
 
-    const source = selectedFixedClothing;
-    setMasterFitAnalyzing(true);
-    addEvent("母版分析", "正在读取当前图2的版型、袖口、腰身和长度规格");
+    setImageFactsAnalyzing(true);
+    addEvent("图2分析", `正在按【${outfitIntentSummary.replaceText}】读取图2服装事实`);
     try {
       const form = new FormData();
       form.append("payload", JSON.stringify({
@@ -7783,67 +7708,92 @@ export default function OutfitWorkflow({
         model: settings.model,
         imageSize: settings.imageSize,
         aspectRatio: settings.aspectRatio,
-        garmentParts: normalizeGarmentParts(settings.garmentParts),
-        garmentComposition: normalizeGarmentComposition(settings.garmentComposition, settings.garmentParts),
-        garmentLengths: normalizeGarmentLengths(settings.garmentLengths, settings.garmentParts),
+        // 分析只认结构化意图（部位 + 上装层级），与最终提示词编译器读的是同一份数据。
+        outfitIntent,
         prompt: settings.prompt,
         productNote: settings.productNote
       }));
-      form.append("image", source.file, `master_${source.name || "clothing.jpg"}`);
+      form.append("image", source.file, `clothing_${source.name || "image2.jpg"}`);
       const payload = await analyzeOutfitMasterFit(form);
-      const spec = normalizeMasterFitSpec(payload.spec || payload.promptBlock);
-      if (!spec) throw new Error("服务端没有返回有效母版规格");
-      updateSetting("masterFitSpec", spec);
-      updateSetting("masterFitSourceId", source.id);
-      updateSetting("masterFitLock", true);
-      addEvent("母版分析", `已锁定「${source.name}」的版型规格`);
+      const facts = normalizeOutfitIntent({ ...outfitIntent, facts: payload.facts }).facts;
+      if (recognizedFactKeys(facts).length === 0) throw new Error("服务端没有返回可识别的图2服装事实");
+      setSettings((current) => {
+        const currentIntent = normalizeOutfitIntent(current.outfitIntent);
+        return {
+          ...current,
+          outfitIntent: {
+            ...currentIntent,
+            facts,
+            factsSource: { mode: "auto", sourceId: source.id, analyzedAt: Date.now() }
+          }
+        };
+      });
+      addEvent("图2分析", `已提取 ${recognizedFactKeys(facts).length} 项服装事实（可展开修改后再生成）`);
     } catch (error) {
-      addEvent("母版分析失败", error instanceof Error ? error.message : String(error));
+      // 分析失败：保留用户已选部位与手动事实，批次照样可以生成。
+      addEvent("图2分析失败", error instanceof Error ? error.message : String(error));
     } finally {
-      setMasterFitAnalyzing(false);
+      setImageFactsAnalyzing(false);
     }
   }
 
-  function openMasterFitPromptModal() {
-    setMasterFitPromptDraft(settings.masterFitSpec || "");
-    setMasterFitPromptOpen(true);
-  }
-
-  function applyMasterFitPromptDraft() {
-    const nextSpec = normalizeMasterFitSpec(masterFitPromptDraft);
-    setSettings((current) => ({
-      ...current,
-      masterFitSpec: nextSpec,
-      masterFitLock: false,
-      masterFitSourceId: nextSpec && selectedFixedClothing?.id ? selectedFixedClothing.id : ""
-    }));
-    setMasterFitPromptOpen(false);
-    addEvent("母版版型", nextSpec ? "已修改母版提示词，请重新开启锁定" : "已清空母版提示词");
-  }
-
-  // 中文注释：切换固定图2只关闭锁定，不清空用户手写的母版提示词，方便继续复用或手动确认。
+  // 中文注释：切换固定图2时不覆盖用户已手动修改的图2事实，只标记事实来源已过期。
+  // （旧实现在这里清母版锁并弹提示；现在事实是否过期由 factsSource.sourceId 判断，UI 会显示提示。）
   function setMasterClothing(id) {
     if (id === fixedClothingId) return;
     setFixedClothingId(id);
-    if (settings.masterFitSpec || settings.masterFitLock) {
-      pauseMasterFitLock("固定图2已更换，母版提示词已保留，请确认后重新开启锁定");
-    }
   }
 
+  // 中文注释：以下是唯一改动结构化换装意图的入口。所有写入都经过 normalizeOutfitIntent，
+  // 保证枚举合法、字段完整；界面只改这一份数据，请求与提示词都从它派生。
+  function patchOutfitIntent(patch) {
+    setSettings((current) => {
+      const currentIntent = normalizeOutfitIntent(current.outfitIntent);
+      const nextPatch = typeof patch === "function" ? patch(currentIntent) : patch;
+      return { ...current, outfitIntent: normalizeOutfitIntent({ ...currentIntent, ...nextPatch }) };
+    });
+  }
+
+  function toggleOutfitPart(part) {
+    const nextParts = outfitIntent.parts.includes(part)
+      ? outfitIntent.parts.filter((item) => item !== part)
+      : [...outfitIntent.parts, part];
+    patchOutfitIntent({ parts: nextParts });
+    if (nextParts.length === 0) addEvent("换装设置", "请至少选择一个更换部位");
+  }
+
+  function updateOutfitWearingValue(key, value) {
+    patchOutfitIntent((current) => ({
+      wearing: { ...current.wearing, values: { ...current.wearing.values, [key]: value } }
+    }));
+  }
+
+  function updateOutfitFact(key, value) {
+    patchOutfitIntent((current) => ({
+      facts: { ...current.facts, [key]: value },
+      // 用户手改过事实后标记为 manual：来源图2换了也不清空用户手工内容。
+      factsSource: { ...current.factsSource, mode: current.factsSource.mode === "auto" ? "manual" : current.factsSource.mode || "manual" }
+    }));
+  }
+
+  function wearingFieldValue(key) {
+    return outfitIntent.wearing.values[key] || "";
+  }
+
+  // 中文注释：批量改色的改色范围（只有 recolor 还在用这套旧机制）。
   function toggleGarmentPart(part) {
     const currentParts = normalizeGarmentParts(settings.garmentParts);
     const nextParts = currentParts.includes(part)
       ? currentParts.filter((item) => item !== part)
       : [...currentParts, part];
     if (nextParts.length === 0) {
-      addEvent("图2部位", "至少保留一个换装部位");
+      addEvent("图2部位", "至少保留一个改色部位");
       return;
     }
     setSettings((current) => ({
       ...current,
       garmentParts: nextParts,
-      garmentComposition: normalizeGarmentComposition(current.garmentComposition, nextParts),
-      garmentLengths: normalizeGarmentLengths(current.garmentLengths, nextParts)
+      garmentComposition: normalizeGarmentComposition(current.garmentComposition, nextParts)
     }));
   }
 
@@ -7853,28 +7803,8 @@ export default function OutfitWorkflow({
     setSettings((current) => ({
       ...current,
       garmentParts: nextParts,
-      garmentComposition: nextComposition,
-      garmentLengths: normalizeGarmentLengths(current.garmentLengths, nextParts)
+      garmentComposition: nextComposition
     }));
-  }
-
-  function updateGarmentLength(kind, value) {
-    setSettings((current) => {
-      const currentParts = normalizeGarmentParts(current.garmentParts);
-      if ((kind === "upper" && !currentParts.includes("upper")) || (kind === "lower" && !currentParts.includes("lower"))) {
-        return {
-          ...current,
-          garmentLengths: normalizeGarmentLengths(current.garmentLengths, currentParts)
-        };
-      }
-      return {
-        ...current,
-        garmentLengths: normalizeGarmentLengths({
-          ...current.garmentLengths,
-          [kind]: value
-        }, currentParts)
-      };
-    });
   }
 
   /**
@@ -8513,9 +8443,6 @@ export default function OutfitWorkflow({
       enableGenerationCountAutoLink();
     }
     if (group === "clothing") {
-      if (fixedClothingId === id && (settings.masterFitSpec || settings.masterFitLock)) {
-        invalidateMasterFitLock("固定图2已移除，请重新设定母版");
-      }
       setClothingImages((items) => {
         const next = remove(items);
         if (fixedClothingId === id) setFixedClothingId(next[0]?.id || "");
@@ -8553,9 +8480,6 @@ export default function OutfitWorkflow({
       });
       if (group === "model") setModelImages(replace);
       if (group === "clothing") {
-        if (fixedClothingId === id && (settings.masterFitSpec || settings.masterFitLock)) {
-          pauseMasterFitLock("固定图2已替换，母版提示词已保留，请确认后重新开启锁定");
-        }
         setClothingImages(replace);
       }
       if (group === "reference") setReferenceImages(replace);
@@ -8600,9 +8524,6 @@ export default function OutfitWorkflow({
       enableGenerationCountAutoLink();
     }
     if (group === "clothing") {
-      if (settings.masterFitSpec || settings.masterFitLock) {
-        invalidateMasterFitLock("图2已清空，母版版型规格已移除");
-      }
       setClothingImages(clear);
       setFixedClothingId("");
     }
@@ -8645,9 +8566,6 @@ export default function OutfitWorkflow({
     });
     if (group === "model") setModelImages(replace);
     if (group === "clothing") {
-      if (item.id === fixedClothingId && (settings.masterFitSpec || settings.masterFitLock)) {
-        pauseMasterFitLock("固定图2已重新裁剪，母版提示词已保留，请确认后重新开启锁定");
-      }
       setClothingImages(replace);
     }
     if (group === "reference") setReferenceImages(replace);
@@ -8745,9 +8663,6 @@ export default function OutfitWorkflow({
 
     if (group === "model") setModelImages(nextItems);
     if (group === "clothing") {
-      if (settings.masterFitSpec || settings.masterFitLock) {
-        pauseMasterFitLock("图2处理方式已变化，母版提示词已保留，请确认后重新开启锁定");
-      }
       setClothingImages(nextItems);
     }
     if (group === "reference") setReferenceImages(nextItems);
@@ -8886,9 +8801,8 @@ export default function OutfitWorkflow({
       ...activeSnapshot,
       settings: stripOutfitPageGlobalSettings({
         ...settings,
-        masterFitLock: false,
-        masterFitSpec: "",
-        masterFitSourceId: ""
+        // 图2换了，之前分析出来的服装事实不再适用：清掉事实本身，保留部位/层级/穿法选择。
+        outfitIntent: { ...outfitIntent, facts: defaultOutfitIntent().facts, factsSource: { mode: "none", sourceId: "", analyzedAt: 0 } }
       })
     };
     const nextPages = ensureWorkflowPages(outfitPages.map((page) => {
@@ -8902,7 +8816,6 @@ export default function OutfitWorkflow({
     setClothingImages([]);
     setReferenceImages([]);
     setFixedClothingId("");
-    invalidateMasterFitLock("上传缓存已清理，母版版型规格已移除");
     setOriginalLibrary([]);
     setTasks((current) => current.map(stripTaskUploadImageCache));
     setCropTarget(null);
@@ -9459,14 +9372,12 @@ function buildTasks(countOverride = plannedGenerationCount) {
         createdAt: Date.now() + index,
         imageSize: settings.imageSize,
         aspectRatio: localEdit?.aspectRatio || cropReturn?.aspectRatio || settings.aspectRatio,
-        garmentParts: usesGarmentScopeControls ? normalizeGarmentParts(settings.garmentParts) : undefined,
-        garmentComposition: usesGarmentScopeControls ? normalizeGarmentComposition(settings.garmentComposition, settings.garmentParts) : undefined,
-        garmentLengths: isOutfitWorkflow ? normalizeGarmentLengths(settings.garmentLengths, settings.garmentParts) : undefined,
+        garmentParts: isRecolorWorkflow ? normalizeGarmentParts(settings.garmentParts) : undefined,
+        garmentComposition: isRecolorWorkflow ? normalizeGarmentComposition(settings.garmentComposition, settings.garmentParts) : undefined,
         randomBackgroundFocus: isRandomBackgroundWorkflow ? normalizeRandomBackgroundFocus(settings.randomBackgroundFocus) : undefined,
-        // 中文注释：把本轮母版规格冻结在任务快照中，避免生成期间修改页面设置导致同批次串版。
-        masterFitLock: masterFitLockReady,
-        masterFitSpec: masterFitLockReady ? normalizeMasterFitSpec(settings.masterFitSpec) : "",
-        masterFitSourceId: masterFitLockReady ? normalizeMasterFitSourceId(settings.masterFitSourceId) : "",
+        // 中文注释：把本轮结构化换装意图（部位 / 上装层级 / 穿法 / 图2事实）冻结在任务快照里。
+        // 批次开始后再改界面，只影响下一批，不会改到在途任务的提示词。
+        outfitIntent: isOutfitWorkflow ? normalizeOutfitIntent(settings.outfitIntent) : undefined,
         pairingMode: settings.pairingMode,
         modelLabel: activeModel.label,
         modelName: modelItem?.name || "",
@@ -9510,8 +9421,6 @@ function buildTasks(countOverride = plannedGenerationCount) {
         model: settings.model,
         imageSize: task.imageSize || settings.imageSize,
         aspectRatio: taskAspectRatio || task.aspectRatio || settings.aspectRatio,
-        masterFitLock: Boolean(task.masterFitLock),
-        masterFitSpec: task.masterFitLock ? normalizeMasterFitSpec(task.masterFitSpec) : "",
         uploadLabels: task.uploadLabels || uploadLabels
       }));
       form.append("image1", modelUploadFile, `image1_${task.order}_${task.modelItem.name || "pose"}`);
@@ -9551,7 +9460,8 @@ function buildTasks(countOverride = plannedGenerationCount) {
     const taskIsOutpaint = taskWorkflowMode === "outpaint";
     const taskIsWhiteRefine = taskWorkflowMode === "white-refine";
     const taskIsRandomBackground = taskWorkflowMode === "random-background";
-    const taskUsesGarmentScope = taskWorkflowMode === "outfit" || taskWorkflowMode === "recolor";
+    const taskIsOutfit = taskWorkflowMode === "outfit";
+    const taskIsRecolor = taskWorkflowMode === "recolor";
     const taskModelFile = imageItemUploadFile(task.modelItem);
     const taskClothingFile = imageItemUploadFile(task.clothingItem);
     let localEdit = taskIsOutpaint || taskIsWhiteRefine || taskIsRandomBackground
@@ -9622,12 +9532,11 @@ function buildTasks(countOverride = plannedGenerationCount) {
       prompt: settings.prompt,
       productNote: settings.productNote,
       smartIntervention: settings.smartIntervention,
-      garmentParts: taskUsesGarmentScope ? normalizeGarmentParts(task.garmentParts || settings.garmentParts) : undefined,
-      garmentComposition: taskUsesGarmentScope ? normalizeGarmentComposition(task.garmentComposition || settings.garmentComposition, task.garmentParts || settings.garmentParts) : undefined,
-      garmentLengths: taskWorkflowMode === "outfit" ? normalizeGarmentLengths(task.garmentLengths || settings.garmentLengths, task.garmentParts || settings.garmentParts) : undefined,
+      garmentParts: taskIsRecolor ? normalizeGarmentParts(task.garmentParts || settings.garmentParts) : undefined,
+      garmentComposition: taskIsRecolor ? normalizeGarmentComposition(task.garmentComposition || settings.garmentComposition, task.garmentParts || settings.garmentParts) : undefined,
       randomBackgroundFocus: taskIsRandomBackground ? normalizeRandomBackgroundFocus(task.randomBackgroundFocus || settings.randomBackgroundFocus) : undefined,
-      masterFitLock: isOutfitWorkflow ? Boolean(task.masterFitLock) : undefined,
-      masterFitSpec: isOutfitWorkflow && task.masterFitLock ? normalizeMasterFitSpec(task.masterFitSpec) : undefined,
+      // 结构化换装意图：只认任务快照（批次开始后就冻结），不再读当前界面设置。
+      outfitIntent: taskIsOutfit ? normalizeOutfitIntent(task.outfitIntent || settings.outfitIntent) : undefined,
       workflowMode: taskWorkflowMode,
       pageName: task.pageName || activeOutfitPage.name,
       uploadLabels: task.uploadLabels || uploadLabels,
@@ -9891,6 +9800,15 @@ function buildTasks(countOverride = plannedGenerationCount) {
 
   async function startBatch() {
     if (running && !canAppendWhileRunning) return;
+    // 批量换装必须先选部位：没选部位时服务端会 400，这里提前拦住并给中文提示。
+    if (isOutfitWorkflow) {
+      const intentCheck = validateOutfitIntent(outfitIntent);
+      if (!intentCheck.ok) {
+        addEvent("换装设置", intentCheck.errors[0] || "请至少选择一个更换部位");
+        setInlineMessage(intentCheck.errors[0] || "请至少选择一个更换部位，再生成");
+        return;
+      }
+    }
     if (!effectiveApiKey) {
       addEvent("缺少 Key", "请先填写 API Key");
       openSettings();
@@ -10222,6 +10140,218 @@ function buildTasks(countOverride = plannedGenerationCount) {
         </div>
       </div>
     );
+  }
+
+  // 图2 卡片里的「图2服装事实」面板：只做分析 + 查看/修改结构化事实，不产生任何提示词文本。
+  function renderImageFactsPanel() {
+    const factsSource = outfitIntent.factsSource;
+    const stale = Boolean(factsSource.sourceId)
+      && Boolean(selectedFixedClothing?.id)
+      && factsSource.sourceId !== selectedFixedClothing.id;
+    const visibleFields = OUTFIT_FACT_FIELDS.filter((field) => field.parts.some((part) => outfitIntent.parts.includes(part)));
+    const summary = visibleFields
+      .map((field) => {
+        const value = outfitIntent.facts[field.key];
+        if (!value || value === FACT_UNRECOGNIZED) return "";
+        return `${field.label}：${value}`;
+      })
+      .filter(Boolean)
+      .join("；");
+    return (
+      <div className="imageFactPanel">
+        <div className="imageFactHeader">
+          <strong><Sparkles size={13} /> 图2服装事实</strong>
+          <span>
+            {outfitIntent.parts.length === 0
+              ? "先在下方「更换部位」里选部位，分析才知道该提取什么"
+              : stale
+                ? "图2已更换，这份事实可能过期，建议重新分析"
+                : `只保留本次所选部位（${outfitIntentSummary.replaceText}）的服装事实`}
+          </span>
+          <em>{outfitRecognizedFacts.length > 0 ? `已识别 ${outfitRecognizedFacts.length} 项` : "未识别"}</em>
+        </div>
+        <div className="imageFactActions">
+          <button
+            className="smallButton"
+            type="button"
+            onClick={() => void analyzeImageFacts()}
+            disabled={imageFactsAnalyzing}
+            title="读取当前图2的服装事实（不会覆盖你的部位/层级/穿法选择，也不会覆盖你手改过的内容）"
+          >
+            {imageFactsAnalyzing ? <Loader2 className="spin" size={14} /> : <Sparkles size={14} />}
+            <span>{imageFactsAnalyzing ? "分析中" : "分析当前图2"}</span>
+          </button>
+          <button className="imageFactToggle" type="button" onClick={() => setFactsDetailOpen((value) => !value)} aria-expanded={factsDetailOpen}>
+            {factsDetailOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            <span>{factsDetailOpen ? "收起" : "查看/修改摘要"}</span>
+          </button>
+        </div>
+        <p className="imageFactSummary">
+          {summary || "还没分析：可以点「分析当前图2」自动读取，也可以留空完全靠手写。"}
+        </p>
+        {factsDetailOpen && (
+          <div className="imageFactEditor">
+            {visibleFields.length === 0 && <small>请先选择更换部位，才会出现对应的服装事实字段。</small>}
+            {visibleFields.map((field) => (
+              <label key={field.key}>
+                <span>{field.label}</span>
+                <input
+                  value={outfitIntent.facts[field.key] === FACT_UNRECOGNIZED ? "" : outfitIntent.facts[field.key]}
+                  placeholder={FACT_UNRECOGNIZED}
+                  onChange={(event) => updateOutfitFact(field.key, event.target.value)}
+                />
+              </label>
+            ))}
+            {visibleFields.length > 0 && (
+              <small>留空或写「未识别」就表示这一项没有可用事实，不会写进最终提示词。</small>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 换装设置区（图1～图3下面）：更换部位 / 上装层级 / 穿法。旧的「单件上衣 / 外套+内搭 / 套装」
+  // 顶层切换和「上装长度 / 下装长度」已删除，长度只作为图2事实被分析出来，不再做成长短按钮。
+  function renderOutfitIntentPanel() {
+    const parts = outfitIntent.parts;
+    const keepLabels = OUTFIT_PART_OPTIONS.filter((part) => !parts.includes(part.value)).map((part) => part.label).join("、");
+    const layerHint = outfitIntent.upperLayer === "auto"
+      ? outfitLayer.resolvedBy === "facts"
+        ? `按图2事实判定为「${outfitLayer.promptLabel}」`
+        : "还没识别出层级，请在下面手动选择（自动识别不会替你猜内搭/外套）"
+      : `将写作「图2的${outfitLayer.promptLabel}」`;
+    return (
+      <section className="outfitIntentPanel" aria-label="换装设置">
+        <header>
+          <div>
+            <h3>换装设置</h3>
+            <span>这里的选择会进入最终提示词；批次开始后再改只影响下一批。</span>
+          </div>
+          <span className={`outfitIntentCount ${parts.length === 0 ? "warn" : ""}`}>
+            {parts.length === 0 ? "未选择更换部位" : `已选 ${parts.length} 个部位`}
+          </span>
+        </header>
+
+        <div className="outfitIntentRow">
+          <span className="outfitIntentRowTitle">更换部位</span>
+          <div className="outfitIntentChips">
+            {OUTFIT_PART_OPTIONS.map((part) => {
+              const active = parts.includes(part.value);
+              return (
+                <button
+                  className={active ? "active" : ""}
+                  key={part.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleOutfitPart(part.value)}
+                >
+                  {active && <Check size={13} />}
+                  <span>{part.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          <small className={parts.length === 0 ? "outfitIntentWarn" : ""}>
+            {parts.length === 0 ? "至少选择一个更换部位才能生成" : `未选择的部位保持图1原样：${keepLabels}`}
+          </small>
+        </div>
+
+        {parts.includes("upper") && (
+          <div className="outfitIntentRow">
+            <span className="outfitIntentRowTitle">上装层级</span>
+            <div className="outfitIntentChips">
+              {UPPER_LAYER_OPTIONS.map((option) => {
+                const active = outfitIntent.upperLayer === option.value;
+                return (
+                  <button
+                    className={active ? "active" : ""}
+                    key={option.value}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => patchOutfitIntent({ upperLayer: option.value })}
+                  >
+                    {active && <Check size={13} />}
+                    <span>{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <small className={outfitLayer.uncertain && outfitIntent.upperLayer === "auto" ? "outfitIntentWarn" : ""}>{layerHint}</small>
+          </div>
+        )}
+
+        <div className="outfitIntentRow">
+          <span className="outfitIntentRowTitle">穿法</span>
+          <div className="outfitIntentChips">
+            {WEARING_MODE_OPTIONS.map((mode) => {
+              const active = outfitIntent.wearing.mode === mode.value;
+              return (
+                <button
+                  className={active ? "active" : ""}
+                  key={mode.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => patchOutfitIntent({ wearing: { ...outfitIntent.wearing, mode: mode.value } })}
+                >
+                  {active && <Check size={13} />}
+                  <span>{mode.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="outfitIntentInline">
+            <small>{outfitWearingTextSummary()}</small>
+            {outfitIntent.wearing.mode === "custom" && (
+              <button className="imageFactToggle" type="button" onClick={() => setWearingDetailOpen((value) => !value)} aria-expanded={wearingDetailOpen}>
+                {wearingDetailOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                <span>{wearingDetailOpen ? "收起详细设置" : "展开详细设置"}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {outfitIntent.wearing.mode === "custom" && wearingDetailOpen && (
+          <div className="outfitWearingEditor">
+            {outfitWearingFieldList.length === 0 && (
+              <small>当前部位没有可设置的穿法项目（鞋子不需要衣领和袖子，未选上装/下装时也不会出现对应项目）。</small>
+            )}
+            {outfitWearingFieldList.map((field) => (
+              <label key={field.key}>
+                <span>{field.label}</span>
+                <select value={wearingFieldValue(field.key)} onChange={(event) => updateOutfitWearingValue(field.key, event.target.value)}>
+                  <option value="">不指定</option>
+                  {field.options.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+        )}
+
+        {outfitPreview.warnings.length > 0 && (
+          <ul className="outfitIntentWarnings">
+            {outfitPreview.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        )}
+      </section>
+    );
+  }
+
+  // 穿法摘要：只说明"当前会怎么写"，不重复编译器的原句。
+  function outfitWearingTextSummary() {
+    if (outfitIntent.wearing.mode === "natural") return "按常规自然穿着，不刻意复刻图2穿法细节";
+    if (outfitIntent.wearing.mode === "custom") {
+      const picked = outfitWearingFieldList
+        .map((field) => {
+          const option = field.options.find((item) => item.value === wearingFieldValue(field.key));
+          return option ? `${field.label}：${option.label}` : "";
+        })
+        .filter(Boolean);
+      return picked.length ? picked.join("｜") : "还没指定任何状态，将只保留部位与图2事实";
+    }
+    return "跟随图2穿法，不自行改变扣合、衣摆、袖子和领口";
   }
 
   function renderResultQueue() {
@@ -10707,9 +10837,9 @@ function buildTasks(countOverride = plannedGenerationCount) {
               onActivate={() => setActiveUploadGroup("clothing")}
               bulkMode={clothingBulkMode}
               onBulkModeChange={(mode) => void applyGroupPreprocess("clothing", mode)}
-              footerControls={usesGarmentScopeControls ? (
-                <div className="garmentTransferControls" aria-label={isRecolorWorkflow ? "图2改色范围设置" : "图2服装迁移设置"}>
-                  <div className="garmentPartPresetGroup" aria-label={isRecolorWorkflow ? "图2常用改色范围" : "图2常用迁移范围"}>
+              footerControls={isRecolorWorkflow ? (
+                <div className="garmentTransferControls" aria-label="图2改色范围设置">
+                  <div className="garmentPartPresetGroup" aria-label="图2常用改色范围">
                     {GARMENT_PART_PRESET_OPTIONS.map((preset) => {
                       const active = sameGarmentParts(selectedGarmentParts, preset.parts)
                         && selectedGarmentComposition === normalizeGarmentComposition(preset.composition, preset.parts);
@@ -10720,7 +10850,7 @@ function buildTasks(countOverride = plannedGenerationCount) {
                           type="button"
                           onClick={() => applyGarmentPartPreset(preset)}
                           aria-pressed={active}
-                          title={`${isRecolorWorkflow ? "改色范围" : "迁移范围"}：${preset.label}；当前按${garmentCompositionLabel(preset.composition)}理解图2服装结构`}
+                          title={`改色范围：${preset.label}；当前按${garmentCompositionLabel(preset.composition)}理解图2服装结构`}
                         >
                           <Check size={13} />
                           <span>{preset.label}</span>
@@ -10728,7 +10858,7 @@ function buildTasks(countOverride = plannedGenerationCount) {
                       );
                     })}
                   </div>
-                  <div className="garmentPartPicker" aria-label={isRecolorWorkflow ? "图2改色部位" : "图2换装部位"}>
+                  <div className="garmentPartPicker" aria-label="图2改色部位">
                     {GARMENT_PART_OPTIONS.map((part) => {
                       const active = selectedGarmentParts.includes(part.value);
                       return (
@@ -10738,7 +10868,7 @@ function buildTasks(countOverride = plannedGenerationCount) {
                           type="button"
                           onClick={() => toggleGarmentPart(part.value)}
                           aria-pressed={active}
-                          title={`图2${isRecolorWorkflow ? "改色" : "迁移"}${part.label}`}
+                          title={`图2改色${part.label}`}
                         >
                           <Check size={13} />
                           <span>{part.label}</span>
@@ -10746,87 +10876,9 @@ function buildTasks(countOverride = plannedGenerationCount) {
                       );
                     })}
                   </div>
-                  {isOutfitWorkflow && <div className="garmentLengthControls" aria-label="图2服装长度">
-                    <label className={!upperLengthEnabled ? "disabled" : ""}>
-                      <span>上装长度</span>
-                      <select
-                        value={activeGarmentLengths.upper}
-                        disabled={!upperLengthEnabled}
-                        onChange={(event) => updateGarmentLength("upper", event.target.value)}
-                      >
-                        {GARMENT_LENGTH_OPTIONS.map((option) => (
-                          <option key={option.value || "none"} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className={!lowerLengthEnabled ? "disabled" : ""}>
-                      <span>下装长度</span>
-                      <select
-                        value={activeGarmentLengths.lower}
-                        disabled={!lowerLengthEnabled}
-                        onChange={(event) => updateGarmentLength("lower", event.target.value)}
-                      >
-                        {GARMENT_LENGTH_OPTIONS.map((option) => (
-                          <option key={option.value || "none"} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>}
                 </div>
               ) : null}
-              sideControls={isOutfitWorkflow ? (
-                <div className={`masterFitControls ${masterFitLockReady ? "ready" : ""}`}>
-                  <div className="masterFitHeader">
-                    <div>
-                      <strong><Lock size={13} /> 母版锁版型</strong>
-                      <span>
-                        {settings.pairingMode === "fixed"
-                          ? masterFitLockReady
-                            ? "当前固定图2已锁定，批量任务共用这份版型规格"
-                            : "固定图2建议先分析一次，锁定袖口、腰身、裙长和面料细节"
-                          : "仅固定服装配对可用"}
-                      </span>
-                    </div>
-                    <button
-                      className={`masterFitSwitch ${masterFitLockReady ? "on" : ""}`}
-                      type="button"
-                      onClick={toggleMasterFitLock}
-                      disabled={!selectedFixedClothing || settings.pairingMode !== "fixed" || masterFitAnalyzing}
-                      aria-pressed={masterFitLockReady}
-                      title={masterFitLockReady ? "关闭母版版型锁定" : "启用母版版型锁定"}
-                    >
-                      <i aria-hidden="true"><b /></i>
-                    </button>
-                  </div>
-                  <div className="masterFitActions">
-                    <button
-                      className="smallButton"
-                      type="button"
-                      onClick={() => void analyzeMasterFit()}
-                      disabled={!selectedFixedClothing || settings.pairingMode !== "fixed" || masterFitAnalyzing}
-                      title="分析当前固定图2母版"
-                    >
-                      {masterFitAnalyzing ? <Loader2 className="spin" size={14} /> : <Sparkles size={14} />}
-                      <span>{masterFitAnalyzing ? "分析中" : "分析当前图2"}</span>
-                    </button>
-                    <button
-                      className="smallButton"
-                      type="button"
-                      onClick={openMasterFitPromptModal}
-                      title="查看或修改母版提示词"
-                    >
-                      <Eye size={14} />
-                      <span>查看母版提示词</span>
-                    </button>
-                    <span className="masterFitSource">
-                      {selectedFixedClothing ? `母版：${selectedFixedClothing.name}` : "尚未选择固定图2"}
-                    </span>
-                  </div>
-                  <p className="masterFitPromptPreview">
-                    {settings.masterFitSpec || "分析后会生成母版版型提示词，也可以点按钮手动填写。"}
-                  </p>
-                </div>
-              ) : null}
+              sideControls={isOutfitWorkflow ? renderImageFactsPanel() : null}
             />
             {!isWhiteRefineWorkflow && <UploadZone
               compact
@@ -10854,6 +10906,9 @@ function buildTasks(countOverride = plannedGenerationCount) {
             />}
           </div>}
           </section>
+
+          {/* 图1～图3下面的换装设置区（旧的长短下拉与三个顶层切换已删除）。 */}
+          {isOutfitWorkflow && renderOutfitIntentPanel()}
 
           <section className="originalLibraryPanel">
           <header>
@@ -10916,6 +10971,30 @@ function buildTasks(countOverride = plannedGenerationCount) {
           </label>
 
           <div className="composerStickyControls">
+            {/* 提交按钮附近的紧凑摘要 + 真实最终提示词预览（预览来自同一个编译器，不是另写的展示文案）。 */}
+            {isOutfitWorkflow && (
+              <div className="outfitIntentBar">
+                <span className="outfitIntentBarText">
+                  本次替换：<b>{outfitIntentSummary.replaceText}</b>
+                  <em>｜</em>保持：{outfitIntentSummary.keepText}
+                  <em>｜</em>穿法：{outfitIntentSummary.wearingText}
+                </span>
+                <span className="outfitIntentBarChars">{outfitPreview.autoChars}/{OUTFIT_AUTO_PROMPT_CHAR_LIMIT} 字</span>
+                <button className="imageFactToggle" type="button" onClick={() => setIntentPreviewOpen((value) => !value)} aria-expanded={intentPreviewOpen}>
+                  {intentPreviewOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  <span>{intentPreviewOpen ? "收起最终提示词" : "查看本次最终提示词"}</span>
+                </button>
+              </div>
+            )}
+            {isOutfitWorkflow && intentPreviewOpen && (
+              <div className="outfitIntentPreview">
+                <pre>{outfitPreview.prompt}</pre>
+                <small>
+                  共 {outfitPreview.chars} 字（自动内容 {outfitPreview.autoChars} 字；建议不超过 {OUTFIT_AUTO_PROMPT_CHAR_LIMIT} 字）。
+                  这是本地预编译结果；服务端会用同一个编译器、并补入智能介入文本后再发送给模型。
+                </small>
+              </div>
+            )}
             <div className="composerFooter">
               {renderOutfitPageRow()}
 
@@ -11137,35 +11216,6 @@ function buildTasks(countOverride = plannedGenerationCount) {
               <button className="primaryButton" type="button" onClick={() => void confirmSaveDirectory()}>
                 <Save size={16} />
                 <span>确定</span>
-              </button>
-            </footer>
-          </section>
-        </div>
-      )}
-
-      {masterFitPromptOpen && (
-        <div className="modalLayer masterFitPromptLayer" onMouseDown={() => setMasterFitPromptOpen(false)}>
-          <section className="masterFitPromptModal" onMouseDown={(event) => event.stopPropagation()}>
-            <header>
-              <div>
-                <h2>母版提示词</h2>
-                <span>{selectedFixedClothing ? `当前图2：${selectedFixedClothing.name}` : "尚未选择固定图2"}</span>
-              </div>
-              <button className="iconButton" type="button" onClick={() => setMasterFitPromptOpen(false)}>
-                <X size={18} />
-              </button>
-            </header>
-            <textarea
-              value={masterFitPromptDraft}
-              onChange={(event) => setMasterFitPromptDraft(event.target.value)}
-              placeholder="可手动填写或修改母版版型提示词：袖口落点、袖克夫长度、扣子开合、衣摆扎法、腰身松量、裙长/裤长、面料纹理、穿法边界等。"
-              autoFocus
-            />
-            <footer>
-              <span>{masterFitPromptDraft.trim().length}/2600</span>
-              <button className="primaryButton" type="button" onClick={applyMasterFitPromptDraft}>
-                <Save size={16} />
-                <span>修改</span>
               </button>
             </footer>
           </section>

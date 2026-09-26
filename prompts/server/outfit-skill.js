@@ -1,16 +1,21 @@
 // 批量生成提示词出口。
 //
-// 2026-09-26：**SKILL / 图1图2 规则已整体删除**。
-// 用户实测"不加 SKILL 和图1/图2 的规则效果更好"，要求把批量侧的「换装规则」开关与背后的
-// 规则一起删掉（快捷侧的「换装」按钮同理，见 src/shared/quickgen-prompt-rules.js）。
+// 2026-09-26 历史：commit d4127ec 把批量侧的 SKILL / 图1图2 规则整块删掉，服务端最终提示词
+// 只剩"用户原话"。副作用是：界面上选的「上装 / 下装 / 鞋子 / 上装层级」这些**用户明确输入**
+// 虽然在请求里传到了服务端（`payload.outfitIntent`），却在最后一步被完全忽略 —— 这就是
+// "以前换装按钮选了没用"的真正原因。
 //
-// 现在的契约（唯一一条）：
-//   - 服务端发给模型的提示词 = 用户自己输入的文字，逐字符不改：
-//     原始提示词 + 姿态锚点智能文本（智能介入生成）+ 场景补充；
-//   - 不再追加批量换装 Skill、图1/图2 关系、服装类别、成衣比例/长度、模型适配等任何规则块；
-//   - 不改模型、渠道、上传图片、尺寸/比例等其它请求字段。
+// 2026-09-26（本次）重新接上，但只接"用户明确选择"这一层：
+//   - 结构化换装意图（更换部位 / 上装层级 / 穿法）→ 由 `src/shared/outfit-intent.js` 的
+//     **唯一编译器** `compileOutfitPrompt()` 编译，前端预览与服务端发送用的是同一份实现；
+//   - 不再引入任何"通用自动规则块"（旧 SKILL / masterWearingLockLines 整块模板都不回来）；
+//   - 结构化选择与「智能介入」开关无关：开关关掉也照样进入提示词；
+//   - 其它批量 workflow（姿态 / 扩图 / 固定背景 / 随机背景 / 改色 / 白底精修 / 换脸 /
+//     设计稿 / 自定义 / 局部回贴）没有 outfitIntent，走原来的"只发用户原话"契约，行为不变。
 //
-// 保留 `buildUserPromptOnly` 这个名字是有意的：它的语义就是"只有用户输入的文字"。
+// 服务端仍然是权威：非法枚举在路由层直接 400（见 server/index.js），这里再归一化一次。
+
+import { compileOutfitPrompt, validateOutfitIntent } from "../../src/shared/outfit-intent.js";
 
 export function primaryOutfitGenerationError(errors) {
   const list = Array.isArray(errors) ? errors.filter(Boolean) : [];
@@ -19,8 +24,7 @@ export function primaryOutfitGenerationError(errors) {
 }
 
 /**
- * 最终提示词：**只有用户自己输入的文字**。
- * 不含任何自动追加的规则块，也不动模型/渠道/图片等其它请求字段。
+ * 只有用户文字时的最终提示词（历史契约，其它 workflow 继续走这里）。
  */
 export function buildUserPromptOnly(payload) {
   const lines = [];
@@ -34,12 +38,29 @@ export function buildUserPromptOnly(payload) {
 }
 
 /**
+ * 批量换装的结构化意图是否应该生效。
+ * 只有"批量换装"（workflowMode === "outfit"）带 outfitIntent 时才编译；
+ * 其它 workflow 一律回落到只发用户文字，避免把换装目标串到别的分区。
+ */
+export function usesOutfitIntent(payload) {
+  if (String(payload?.workflowMode || "") !== "outfit") return false;
+  const raw = payload?.outfitIntent;
+  if (!raw || typeof raw !== "object") return false;
+  return validateOutfitIntent(raw).ok;
+}
+
+/**
  * 批量生成的最终提示词。
- *
- * 历史上有过一层"按 workflow 分派规则构建器"的实现（`buildOutfitPrompt` 会拼
- * 批量换装 Skill / 图3 门控 / 服装类别 / 成衣比例长度 等），已按用户要求删除；
- * 这里保留函数名，调用方（server/index.js 的路由预检与真实请求）不用改。
+ * - 批量换装 + 合法 outfitIntent → 唯一编译器（用户补充 / 本次换装目标 / 图2服装事实 / 穿法状态 / 人物基准）
+ * - 其它情况 → 只发用户原话（历史契约）
  */
 export function buildOutfitPrompt(payload) {
-  return buildUserPromptOnly(payload);
+  if (!usesOutfitIntent(payload)) return buildUserPromptOnly(payload);
+  const { intent } = validateOutfitIntent(payload.outfitIntent);
+  return compileOutfitPrompt({
+    intent,
+    userPrompt: payload?.prompt,
+    poseAnchorPrompt: payload?.poseAnchorPrompt,
+    productNote: payload?.productNote
+  }).prompt;
 }

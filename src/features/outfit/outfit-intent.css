@@ -1,0 +1,286 @@
+/* 批量换装「结构化换装设置」+「图2服装事实」样式。
+ *
+ * 为什么单独一个文件：这一块是本轮新增的批量换装专属 UI，
+ * 不塞进已经很大的 outfit-workflow.css，避免和其它分区样式互相影响。
+ * 只在 isOutfitWorkflow 时渲染对应 DOM，其它分区不受影响。 */
+
+.outfitWorkflowEmbedded .outfitIntentPanel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+}
+
+.outfitWorkflowEmbedded .outfitIntentPanel > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.outfitWorkflowEmbedded .outfitIntentPanel > header div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .outfitIntentPanel h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.outfitWorkflowEmbedded .outfitIntentPanel > header span {
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.outfitWorkflowEmbedded .outfitIntentCount {
+  flex: none;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-soft) !important;
+  font-size: 11px !important;
+  white-space: nowrap;
+}
+
+.outfitWorkflowEmbedded .outfitIntentCount.warn {
+  color: #fbbf24 !important;
+  border-color: color-mix(in srgb, #fbbf24 45%, transparent);
+}
+
+.outfitWorkflowEmbedded .outfitIntentRow {
+  display: grid;
+  gap: 5px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .outfitIntentRowTitle {
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.outfitWorkflowEmbedded .outfitIntentChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* 选中 = 金色（与快捷生成的渠道选中口径一致），未选中 = 常规文字色。 */
+.outfitWorkflowEmbedded .outfitIntentChips button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.outfitWorkflowEmbedded .outfitIntentChips button:hover {
+  border-color: color-mix(in srgb, #fbbf24 45%, transparent);
+}
+
+.outfitWorkflowEmbedded .outfitIntentChips button.active {
+  color: #fbbf24;
+  border-color: color-mix(in srgb, #fbbf24 60%, transparent);
+  background: color-mix(in srgb, #fbbf24 14%, transparent);
+}
+
+.outfitWorkflowEmbedded .outfitIntentRow small,
+.outfitWorkflowEmbedded .imageFactEditor small,
+.outfitWorkflowEmbedded .outfitIntentPreview small {
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.outfitWorkflowEmbedded .outfitIntentWarn {
+  color: #fbbf24 !important;
+}
+
+.outfitWorkflowEmbedded .outfitIntentInline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .outfitIntentWarnings {
+  margin: 0;
+  padding-left: 18px;
+  color: #fbbf24;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* 展开的详细设置：不一次铺开大量表单，按需展开。 */
+.outfitWorkflowEmbedded .outfitWearingEditor,
+.outfitWorkflowEmbedded .imageFactEditor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel-strong) 46%, transparent);
+}
+
+.outfitWorkflowEmbedded .outfitWearingEditor label,
+.outfitWorkflowEmbedded .imageFactEditor label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.outfitWorkflowEmbedded .outfitWearingEditor label > span,
+.outfitWorkflowEmbedded .imageFactEditor label > span {
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.outfitWorkflowEmbedded .outfitWearingEditor select,
+.outfitWorkflowEmbedded .imageFactEditor input {
+  height: 30px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  outline: 0;
+}
+
+.outfitWorkflowEmbedded .outfitWearingEditor small,
+.outfitWorkflowEmbedded .imageFactEditor small {
+  grid-column: 1 / -1;
+}
+
+/* 图2 卡片里的服装事实面板（沿用原来 sideControls 的位置）。 */
+.outfitWorkflowEmbedded .imageFactPanel {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel-strong) 42%, transparent);
+}
+
+.outfitWorkflowEmbedded .imageFactHeader {
+  display: grid;
+  gap: 3px;
+}
+
+.outfitWorkflowEmbedded .imageFactHeader strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.outfitWorkflowEmbedded .imageFactHeader span {
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.outfitWorkflowEmbedded .imageFactHeader em {
+  color: var(--text-soft);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.outfitWorkflowEmbedded .imageFactActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.outfitWorkflowEmbedded .imageFactToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-soft);
+  background: transparent;
+  font-size: 11px;
+}
+
+.outfitWorkflowEmbedded .imageFactToggle:hover {
+  color: #fbbf24;
+}
+
+.outfitWorkflowEmbedded .imageFactSummary {
+  margin: 0;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* 提交按钮附近的摘要条 + 最终提示词预览。 */
+.outfitWorkflowEmbedded .outfitIntentBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel-strong) 42%, transparent);
+}
+
+.outfitWorkflowEmbedded .outfitIntentBarText {
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.outfitWorkflowEmbedded .outfitIntentBarText b {
+  color: #fbbf24;
+  font-weight: 700;
+}
+
+.outfitWorkflowEmbedded .outfitIntentBarText em {
+  margin: 0 5px;
+  color: var(--border);
+  font-style: normal;
+}
+
+.outfitWorkflowEmbedded .outfitIntentBarChars {
+  margin-left: auto;
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.outfitWorkflowEmbedded .outfitIntentPreview {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel-strong) 46%, transparent);
+}
+
+.outfitWorkflowEmbedded .outfitIntentPreview pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
