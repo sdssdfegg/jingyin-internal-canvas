@@ -515,7 +515,8 @@ export function compileOutfitPrompt(options = {}) {
 
   const sections = [];
   if (userBlocks.length) sections.push({ id: "user", title: "【用户补充】", body: userBlocks.join("\n\n") });
-  const targetBody = [targets, keep].filter(Boolean).join("\n");
+  // 2026-09-26（按用户要求）：换装目标句很短，合成**一排**，不再换行。
+  const targetBody = [targets, keep].filter(Boolean).join("");
   if (targetBody) sections.push({ id: "target", title: "【本次换装目标】", body: targetBody });
   if (facts) sections.push({ id: "facts", title: "【图2服装事实】", body: facts });
   if (wearing) sections.push({ id: "wearing", title: "【穿法状态】", body: wearing });

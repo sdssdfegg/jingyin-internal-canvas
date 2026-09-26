@@ -8,18 +8,39 @@
    （见 outfit-workflow.css）：
      结果图 .resultPanel         order 1
      图1~图3 .assetGrid          order 2
-     换装设置 .outfitIntentPanel  order 3   ← 本文件
      原图库 .originalLibraryPanel order 4
-   提示词 .composerPanel 在 `.outfitScrollArea` 之外、外层 order 3，所以永远在这整块下面。
-   这里必须显式写 order：不写就是 0，会跑到结果图和上传区上面去（2026-09-26 实测踩过）。 */
+   2026-09-26 起换装设置已经搬到下方提示词区（`.composerBody` 左半边），
+   不再属于滚动区，所以这里不再需要 order；保留 order: 0 只为万一被放回滚动区时不乱跑。 */
 .outfitWorkflowEmbedded .outfitIntentPanel {
-  order: 3;
+  order: 0;
   display: grid;
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel-bg);
+}
+
+/* 提示词区两栏：左边换装设置，右边通用换装提示词 + 补充提示词。 */
+.outfitWorkflowEmbedded .composerBody {
+  display: grid;
+  gap: 10px;
+  align-items: start;
+}
+
+.outfitWorkflowEmbedded .composerBody.withIntent {
+  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.15fr);
+}
+
+.outfitWorkflowEmbedded .composerPromptCol {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 换装设置搬到左半边后，内部的 chip 行在窄栏里换行更自然。 */
+.outfitWorkflowEmbedded .composerIntentCol .outfitIntentPanel {
+  height: 100%;
 }
 
 .outfitWorkflowEmbedded .outfitIntentPanel > header {
@@ -282,19 +303,18 @@
   font-weight: 500;
 }
 
-/* 只读的实际发送内容：外观跟原来的输入框一致，只是加一点金色边框提示"这是结果不是输入"。
+/* 「通用换装提示词」框：内容由换装设置自动生成（也能手改），它就是真正发送的内容。
    高度随内容自撑（field-sizing 首选 + JS 兜底），框内不出现第二条滚动条。 */
 .outfitWorkflowEmbedded .composerField textarea.outfitPromptLive {
   height: auto;
-  min-height: 96px;
+  min-height: 118px;
   /* 只有极端超长（>480px）时才允许框内滚动，正常长度下整页只有一条滚动条。 */
   max-height: 480px;
   overflow-y: auto;
   field-sizing: content;
-  border-color: color-mix(in srgb, #fbbf24 34%, transparent);
+  border-color: color-mix(in srgb, #fbbf24 30%, transparent);
   background: color-mix(in srgb, var(--panel-strong) 40%, transparent);
-  cursor: default;
-  resize: none;
+  resize: vertical;
 }
 
 .outfitWorkflowEmbedded .composerField textarea.outfitPromptLive:focus {

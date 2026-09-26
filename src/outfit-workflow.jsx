@@ -7071,8 +7071,6 @@ export default function OutfitWorkflow({
   const [imageFactsAnalyzing, setImageFactsAnalyzing] = useState(false);
   const [wearingDetailOpen, setWearingDetailOpen] = useState(false);
   const [factsDetailOpen, setFactsDetailOpen] = useState(false);
-  // 只读「通用换装提示词」框要随内容自动撑高（否则它自己会出现第二条滚动条）。
-  const promptLiveWrapRef = useRef(null);
   const [inlineMessage, setInlineMessage] = useState("");
   const [, setEvents] = useState([]);
   const [clockNow, setClockNow] = useState(Date.now());
@@ -7166,8 +7164,14 @@ export default function OutfitWorkflow({
   const outfitIntentSummary = summarizeOutfitIntent(outfitIntent);
   const outfitWearingFieldList = visibleWearingFields(outfitIntent);
   const outfitRecognizedFacts = recognizedFactKeys(outfitIntent.facts);
-  // 最终提示词预览：与提交时服务端用的是同一个编译器（服务端还会再补智能介入文本并做权威校验）。
-  const outfitPreview = compileOutfitPrompt({ intent: outfitIntent, userPrompt: settings.prompt, productNote: settings.productNote });
+  // 换装目标 + 图2事实 + 穿法 + 人物基准（不含补充提示词）：这是"通用换装提示词"框的自动主体。
+  const outfitPreview = compileOutfitPrompt({ intent: outfitIntent });
+  const outfitAutoPrompt = outfitPreview.prompt;
+  // 通用换装提示词框里最终该有的完整内容 = 自动主体 + 下面的补充提示词（接着写在下边）。
+  // 补充提示词只作为这个框的正文出现一次，不再作为独立字段重复发给 API。
+  const outfitPromptWithNote = [outfitAutoPrompt, String(settings.productNote || "").trim()]
+    .filter(Boolean)
+    .join("\n");
   const completedCount = tasks.filter((task) => task.status === "success").length;
   const failedCount = tasks.filter((task) => task.status === "failed").length;
   const runningCount = tasks.filter((task) => task.status === "running").length;
@@ -7620,11 +7624,35 @@ export default function OutfitWorkflow({
     });
   }, [activeView, visibleTasks.length, tasks.length, galleryCardMin]);
 
-  // 只读提示词框随内容自撑高度：整页只保留主内容区那一条滚动条，框内不再出现第二条。
-  // 首选交给 CSS 的 field-sizing: content（浏览器自己按内容定高）；不支持该属性时再用 JS 兜底。
-  // 注意不能让 JS 直接写死像素高度 —— 那会和 field-sizing 打架，反而把内容裁掉。
+  // 只读提示词框随内容自撑高度（见下）；这里先把 ref 挂到 label 上，方便取到里面的 textarea。
+  const promptFieldRef = useRef(null);
+  // 「通用换装提示词」是否被用户手改过：手改后先不再自动覆盖，直到下一次改换装设置/补充提示词。
+  const outfitPromptHandEditedRef = useRef(false);
+  // 切页视为没有手改（换回这一页时按当前设置重新生成）。
   useEffect(() => {
-    const el = promptLiveWrapRef.current?.querySelector("textarea");
+    outfitPromptHandEditedRef.current = false;
+  }, [activeOutfitPageId]);
+
+  // 2026-09-26（按用户要求）：批量换装的「通用换装提示词」由换装设置 + 图2事实 + 补充提示词自动生成。
+  // - 换装部位/层级/穿法/图2事实一变，就按新设置重新生成一遍（"再点服装部位还是这套逻辑"）；
+  // - 下面的补充提示词改写时，实时接到这一框的最后面；
+  // - 用户直接手改这一框时，手改内容保留，不会被自动生成立刻盖掉；
+  // - 依赖里带上 settings.prompt 是必须的：草稿加载会把存档里的旧提示词写回来，
+  //   只靠 outfitPromptWithNote 变化会漏掉这一拍，导致页面上留着旧的手写文案（已实测踩过）。
+  useEffect(() => {
+    if (!isOutfitWorkflow) return;
+    if (outfitPromptHandEditedRef.current) return;
+    setSettings((current) => (String(current.prompt || "") === outfitPromptWithNote
+      ? current
+      : { ...current, prompt: outfitPromptWithNote }));
+  }, [isOutfitWorkflow, outfitPromptWithNote, settings.prompt]);
+
+  // 通用换装提示词框按内容自撑高度：整页只保留一条滚动条，框内不出现第二条。
+  // 首选 CSS 的 field-sizing: content（浏览器自己按内容定高），不支持时再用 JS 兜底。
+  // 注意不能让 JS 写死像素高度与 field-sizing 打架 —— 那会把内容裁掉（已经踩过一次）。
+  useEffect(() => {
+    if (!isOutfitWorkflow) return;
+    const el = promptFieldRef.current?.querySelector("textarea.outfitPromptLive");
     if (!el) return;
     const supportsFieldSizing = typeof CSS !== "undefined"
       && typeof CSS.supports === "function"
@@ -7635,7 +7663,7 @@ export default function OutfitWorkflow({
     }
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 480)}px`;
-  }, [outfitPreview.prompt]);
+  }, [isOutfitWorkflow, settings.prompt]);
 
   useEffect(() => {
     if (!preview) return undefined;
@@ -7771,6 +7799,8 @@ export default function OutfitWorkflow({
   // 中文注释：以下是唯一改动结构化换装意图的入口。所有写入都经过 normalizeOutfitIntent，
   // 保证枚举合法、字段完整；界面只改这一份数据，请求与提示词都从它派生。
   function patchOutfitIntent(patch) {
+    // 改换装设置 = 重新按设置生成「通用换装提示词」（用户手改过也让位给这次重算）。
+    outfitPromptHandEditedRef.current = false;
     setSettings((current) => {
       const currentIntent = normalizeOutfitIntent(current.outfitIntent);
       const nextPatch = typeof patch === "function" ? patch(currentIntent) : patch;
@@ -10931,8 +10961,8 @@ function buildTasks(countOverride = plannedGenerationCount) {
           </div>}
           </section>
 
-          {/* 图1～图3下面的换装设置区（旧的长短下拉与三个顶层切换已删除）。 */}
-          {isOutfitWorkflow && renderOutfitIntentPanel()}
+          {/* 2026-09-26（按用户要求）：换装设置已搬到下方提示词区的左半边，
+              这里不再占一整块竖向空间，图1~图3 下面直接就是原图库。 */}
 
           <section className="originalLibraryPanel">
           <header>
@@ -10974,70 +11004,79 @@ function buildTasks(countOverride = plannedGenerationCount) {
             </div>
           </div>
 
-          <label className="composerField">
-            <span>
-              {promptFieldTitle}
-              {isOutfitWorkflow && (
-                <em className="composerFieldHint">只读 · 随换装设置实时更新，这就是实际发送的内容</em>
-              )}
-            </span>
-            {/* 2026-09-26（按用户反馈）：批量换装的这个框**直接显示**实时编译结果，
-                不再另开一个"实际提示词"框。
-                它必须是只读的 —— 因为内容由「换装设置 + 图2事实 + 你自己的补充」实时算出来，
-                如果还允许手打，下一次改设置就会把手工内容覆盖掉（那就变成静默丢字）。
-                你自己的补充要求写下面那个「{productNoteFieldTitle}」框，它会实时进到这个框的第一段。 */}
-            {isOutfitWorkflow ? (
-              <div className="outfitPromptLiveWrap" ref={promptLiveWrapRef}>
+          {/* 2026-09-26（按用户要求）：换装设置内容不多，搬到提示词左边这半边的空位里，
+              原来在图1~图3下面占的那一整块竖向空间就省出来了。
+              左边 = 换装设置；右边 = 通用换装提示词 + 补充提示词。 */}
+          <div className={`composerBody ${isOutfitWorkflow ? "withIntent" : ""}`}>
+            {isOutfitWorkflow && (
+              <div className="composerIntentCol">
+                {renderOutfitIntentPanel()}
+              </div>
+            )}
+
+            <div className="composerPromptCol">
+              <label className="composerField" ref={promptFieldRef}>
+                <span>
+                  {promptFieldTitle}
+                  {isOutfitWorkflow && (
+                    <em className="composerFieldHint">按换装设置自动生成，也可以直接手改</em>
+                  )}
+                </span>
+                {/* 批量换装：这个框就是**真正发送的内容**。
+                    它由「换装设置 + 图2服装事实 + 下面的补充提示词」自动生成；
+                    用户可以随手调整/增删，改换装部位时会按设置重新生成一遍。 */}
                 <DebouncedTextarea
-                  className="outfitPromptLive"
-                  value={outfitPreview.prompt}
-                  readOnly
+                  className={isOutfitWorkflow ? "outfitPromptLive" : undefined}
+                  value={settings.prompt}
+                  onChange={(value) => {
+                    // 手改「通用换装提示词」：先记下来，别让自动生成立刻盖掉用户写的东西。
+                    outfitPromptHandEditedRef.current = true;
+                    updateSetting("prompt", value);
+                  }}
                   onKeyDown={handlePromptKeyDown}
                   placeholder={promptFieldPlaceholder}
                 />
-              </div>
-            ) : (
-              <DebouncedTextarea
-                value={settings.prompt}
-                onChange={(value) => updateSetting("prompt", value)}
-                onKeyDown={handlePromptKeyDown}
-                placeholder={promptFieldPlaceholder}
-              />
-            )}
-            {isOutfitWorkflow && (
-              <div className="outfitPromptMeta">
+                {isOutfitWorkflow && (
+                  <div className="outfitPromptMeta">
+                    <span>
+                      共 {String(settings.prompt || "").length} 字（其中自动内容 {outfitPreview.autoChars}/{OUTFIT_AUTO_PROMPT_CHAR_LIMIT} 字）
+                    </span>
+                    <button
+                      className="outfitPromptClear"
+                      type="button"
+                      onClick={() => {
+                        updateSetting("prompt", outfitAutoPrompt);
+                        addEvent("换装设置", "已按当前换装设置重新生成提示词");
+                      }}
+                      title="把上面这个框恢复成按当前换装设置生成的内容"
+                    >
+                      按设置重新生成
+                    </button>
+                  </div>
+                )}
+              </label>
+
+              <label className="composerField composerNote">
                 <span>
-                  共 {outfitPreview.chars} 字（自动内容 {outfitPreview.autoChars}/{OUTFIT_AUTO_PROMPT_CHAR_LIMIT} 字）
-                  {String(settings.prompt || "").trim() ? " · 含你以前手写的那段" : ""}
+                  {productNoteFieldTitle}
+                  {isOutfitWorkflow && (
+                    <em className="composerFieldHint">会实时接到上面提示词的最后（只作为提示词正文的一部分，不再单独重复发给 API）</em>
+                  )}
                 </span>
-                {String(settings.prompt || "").trim() ? (
-                  <button
-                    className="outfitPromptClear"
-                    type="button"
-                    onClick={() => {
-                      updateSetting("prompt", "");
-                      addEvent("换装设置", "已清空手写提示词；现在的目标句由换装设置自动生成");
-                    }}
-                    title="结构化换装已经会自动生成同样的目标句，手写那段通常不再需要"
-                  >
-                    清空手写提示词
-                  </button>
-                ) : null}
-              </div>
-            )}
-          </label>
-
-          {/* 2026-09-26：完整提示词已经直接显示在「通用换装提示词」框里，这里不再重复一份。 */}
-
-          <label className="composerField composerNote">
-            <span>{productNoteFieldTitle}</span>
-            <DebouncedTextarea
-              value={settings.productNote}
-              onChange={(value) => updateSetting("productNote", value)}
-              onKeyDown={handlePromptKeyDown}
-              placeholder={productNotePlaceholder}
-            />
-          </label>
+                <DebouncedTextarea
+                  value={settings.productNote}
+                  onChange={(value) => {
+                    // 补充提示词本身就是「通用换装提示词」正文的一部分：改它就重新拼一次，
+                    // 保证"实时接到下面"这件事在手改过提示词之后也照样成立。
+                    outfitPromptHandEditedRef.current = false;
+                    updateSetting("productNote", value);
+                  }}
+                  onKeyDown={handlePromptKeyDown}
+                  placeholder={productNotePlaceholder}
+                />
+              </label>
+            </div>
+          </div>
 
           <div className="composerStickyControls">
             {/* 提交按钮旁的一行摘要（完整提示词在「通用换装提示词」下面常显，不用再点开）。 */}

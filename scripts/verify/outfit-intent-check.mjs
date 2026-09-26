@@ -80,18 +80,22 @@ Object.entries(layers).forEach(([value, expected]) => {
 check("内搭/外套/内搭+外套三种文字互不相同",
   new Set([layers.inner, layers.outer, layers["inner-outer"]]).size === 3);
 
-// —— 3b) 需求里给出的那条完整原文（纯正文，不带【】小标题）
+// —— 3b) 需求里给出的那条完整原文（纯正文，不带【】小标题；目标句排成一排）
 const required = compiled({ parts: ["upper"], upperLayer: "inner-outer" });
 check("『内搭+外套、下装不变、鞋子不变』完整原文与需求一致",
   required.prompt === [
-    "让图1模特穿着图2的内搭和外套。",
-    "图1的下装和鞋子保持不变。",
+    "让图1模特穿着图2的内搭和外套。图1的下装和鞋子保持不变。",
     "",
     "穿法跟随图2，不自行改变扣合、衣摆、袖子和领口状态。",
     "",
     OUTFIT_PERSON_BASELINE
   ].join("\n"),
   JSON.stringify(required.prompt));
+check("换装目标与保持句排成一排（中间不换行）",
+  required.targets === "让图1模特穿着图2的内搭和外套。"
+    && required.keep === "图1的下装和鞋子保持不变。"
+    && required.prompt.split("\n")[0] === "让图1模特穿着图2的内搭和外套。图1的下装和鞋子保持不变。",
+  required.prompt.split("\n")[0]);
 check("发给模型的最终提示词不含任何【】小标题",
   !/【[^】]*】/.test(required.prompt),
   required.prompt.slice(0, 60));

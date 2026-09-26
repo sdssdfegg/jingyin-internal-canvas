@@ -7,9 +7,11 @@
 //
 // 2026-09-26（本次）重新接上，但只接"用户明确选择"这一层：
 //   - 结构化换装意图（更换部位 / 上装层级 / 穿法）→ 由 `src/shared/outfit-intent.js` 的
-//     **唯一编译器** `compileOutfitPrompt()` 编译，前端预览与服务端发送用的是同一份实现；
+//     **唯一编译器** `compileOutfitPrompt()` 编译；
+//   - 前端把编译结果直接写进「通用换装提示词」框（用户可手改），请求里的 `payload.prompt`
+//     就是最终正文，服务端原样转发；前端没给正文时服务端用同一个编译器兜底；
 //   - 不再引入任何"通用自动规则块"（旧 SKILL / masterWearingLockLines 整块模板都不回来）；
-//   - 结构化选择与「智能介入」开关无关：开关关掉也照样进入提示词；
+//   - 补充提示词只在前端并进正文一次，服务端不再重复追加（避免同一段发两遍）；
 //   - 其它批量 workflow（姿态 / 扩图 / 固定背景 / 随机背景 / 改色 / 白底精修 / 换脸 /
 //     设计稿 / 自定义 / 局部回贴）没有 outfitIntent，走原来的"只发用户原话"契约，行为不变。
 //
@@ -51,16 +53,25 @@ export function usesOutfitIntent(payload) {
 
 /**
  * 批量生成的最终提示词。
- * - 批量换装 + 合法 outfitIntent → 唯一编译器（用户补充 / 本次换装目标 / 图2服装事实 / 穿法状态 / 人物基准）
- * - 其它情况 → 只发用户原话（历史契约）
+ *
+ * 2026-09-26（本轮调整，按用户要求）：
+ *   批量换装的「通用换装提示词」框现在**就是真正发送的内容** —— 前端已经把它按
+ *   「换装设置 + 图2服装事实 + 补充提示词」生成好，并且用户可以在这个框里手动增删调整。
+ *   所以服务端这一层改成：
+ *     1. 客户端给了提示词正文 → 原样使用（尊重用户的手改）；
+ *     2. 客户端没给正文（其它客户端/脚本）→ 用唯一编译器从 outfitIntent 兜底生成，
+ *        保证服务端单独也能产出正确的结构化提示词；
+ *     3. 两种情况都不再重复追加 `productNote` —— 补充提示词已经在前端并进正文了，
+ *        这里再加一次就是重复发送（用户明确要求不能重复）；
+ *     4. 「智能介入」的 poseAnchorPrompt 仍然追加，它不属于补充提示词。
+ *
+ * 其它情况（没有合法 outfitIntent 的批量 workflow）→ 只发用户原话（历史契约，行为不变）。
  */
 export function buildOutfitPrompt(payload) {
   if (!usesOutfitIntent(payload)) return buildUserPromptOnly(payload);
   const { intent } = validateOutfitIntent(payload.outfitIntent);
-  return compileOutfitPrompt({
-    intent,
-    userPrompt: payload?.prompt,
-    poseAnchorPrompt: payload?.poseAnchorPrompt,
-    productNote: payload?.productNote
-  }).prompt;
+  const clientPrompt = String(payload?.prompt || "").trim();
+  const base = clientPrompt || compileOutfitPrompt({ intent }).prompt;
+  const poseAnchorPrompt = String(payload?.poseAnchorPrompt || "").trim();
+  return [base, poseAnchorPrompt].filter(Boolean).join("\n\n");
 }

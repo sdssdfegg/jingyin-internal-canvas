@@ -90,7 +90,10 @@ async function callGenerateOutfit({ taskId, payloadPatch = {}, model = "tt-image
     dispatchMode: "manual",
     imageSize: "2K",
     aspectRatio: "3:4",
-    prompt: "用户原话：按图2做一版干净的电商成片",
+    // 默认留空 prompt：走服务端"没有客户端正文 → 用唯一编译器兜底"这条路径，
+    // 这样下面所有组合断言验的都是共享编译器的真实输出。
+    // 生产路径（前端已经把正文生成好）单独在「10) 转发」那一组里验。
+    prompt: "",
     workflowMode: "outfit",
     pageName: "批量换装",
     pairingMode: "fixed",
@@ -192,8 +195,8 @@ try {
 
   // —— 3) 需求里那条完整原文（内搭+外套、下装/鞋子保持）
   const requiredPrompt = layerPrompts["inner-outer"];
-  check("『内搭+外套、下装不变、鞋子不变』完整原文正确",
-    requiredPrompt.includes("让图1模特穿着图2的内搭和外套。\n图1的下装和鞋子保持不变。"),
+  check("『内搭+外套、下装不变、鞋子不变』完整原文正确（目标句一排）",
+    requiredPrompt.includes("让图1模特穿着图2的内搭和外套。图1的下装和鞋子保持不变。"),
     requiredPrompt.slice(0, 160));
   check("人物基准只出现一次",
     requiredPrompt.split("图1是唯一人物身份、人体结构和姿势基准，不改变图1人物的身份、骨骼和姿势。").length - 1 === 1);
@@ -276,7 +279,12 @@ try {
   const recolor = await callGenerateOutfit({
     taskId: "recolor-no-intent",
     model: "tt-image-2",
-    payloadPatch: { workflowMode: "recolor", pageName: "批量改色", outfitIntent: undefined }
+    payloadPatch: {
+      workflowMode: "recolor",
+      pageName: "批量改色",
+      outfitIntent: undefined,
+      prompt: "用户原话：按图2做一版干净的电商成片"
+    }
   });
   check("不带 outfitIntent 的其它 workflow 仍只发用户原话",
     recolor.status === 200 && lastUpstreamPrompt.trim() === "用户原话：按图2做一版干净的电商成片",
@@ -291,7 +299,53 @@ try {
   });
   const baselineCount = duplication.prompt.split("图1是唯一人物身份、人体结构和姿势基准").length - 1;
   check("人物基准只有一处（上游提示词）", baselineCount === 1, String(baselineCount));
-  check("用户原话只出现一次", duplication.prompt.split("用户原话：按图2做一版干净的电商成片").length - 1 === 1);
+
+  // —— 10) 生产路径：前端已经把「通用换装提示词」生成好（含补充提示词），服务端必须原样转发
+  const clientPrompt = [
+    "让图1模特穿着图2的内搭和外套。图1的下装和鞋子保持不变。",
+    "",
+    "类别与内外层：外套+内搭两层",
+    "",
+    "穿法跟随图2，不自行改变扣合、衣摆、袖子和领口状态。",
+    "",
+    "图1是唯一人物身份、人体结构和姿势基准，不改变图1人物的身份、骨骼和姿势。",
+    "",
+    "补充要求：背景换成纯白，保留手表"
+  ].join("\n");
+  lastUpstreamPrompt = "";
+  const forwarded = await callGenerateOutfit({
+    taskId: "forward-client-prompt",
+    payloadPatch: {
+      outfitIntent: intent({ parts: ["upper", "lower"], upperLayer: "inner-outer" }),
+      prompt: clientPrompt,
+      productNote: "补充要求：背景换成纯白，保留手表"
+    }
+  });
+  check("前端生成好的提示词被原样转发（含用户手改）",
+    forwarded.status === 200 && lastUpstreamPrompt.trim() === clientPrompt,
+    `status=${forwarded.status} got=${JSON.stringify(lastUpstreamPrompt.replace(/\r\n/g, "\n").slice(0, 120))}`);
+  check("补充提示词不会被服务端再发一遍（只出现一次）",
+    lastUpstreamPrompt.split("补充要求：背景换成纯白，保留手表").length - 1 === 1,
+    String(lastUpstreamPrompt.split("补充要求：背景换成纯白，保留手表").length - 1));
+  check("转发路径不再重复追加换装目标句",
+    lastUpstreamPrompt.split("让图1模特穿着图2的内搭和外套。").length - 1 === 1,
+    String(lastUpstreamPrompt.split("让图1模特穿着图2的内搭和外套。").length - 1));
+  check("转发路径没有出现【】小标题", !/【[^】]*】/.test(lastUpstreamPrompt));
+
+  // 智能介入（姿态锚点）不属于补充提示词，仍然要追加
+  lastUpstreamPrompt = "";
+  await callGenerateOutfit({
+    taskId: "forward-with-pose-anchor",
+    payloadPatch: {
+      outfitIntent: intent({ parts: ["upper"] }),
+      prompt: clientPrompt,
+      productNote: "补充要求：背景换成纯白，保留手表",
+      poseAnchorPrompt: "姿态锚点：保持图1站姿"
+    }
+  });
+  check("转发路径仍然追加智能介入/姿态锚点文本",
+    lastUpstreamPrompt.includes(clientPrompt) && lastUpstreamPrompt.includes("姿态锚点：保持图1站姿"),
+    JSON.stringify(lastUpstreamPrompt.replace(/\r\n/g, "\n").slice(-60)));
 } catch (error) {
   results.push({ name: "fatal", pass: false, detail: error instanceof Error ? error.message : String(error) });
 } finally {
