@@ -7071,6 +7071,8 @@ export default function OutfitWorkflow({
   const [imageFactsAnalyzing, setImageFactsAnalyzing] = useState(false);
   const [wearingDetailOpen, setWearingDetailOpen] = useState(false);
   const [factsDetailOpen, setFactsDetailOpen] = useState(false);
+  // 只读「通用换装提示词」框要随内容自动撑高（否则它自己会出现第二条滚动条）。
+  const promptLiveWrapRef = useRef(null);
   const [inlineMessage, setInlineMessage] = useState("");
   const [, setEvents] = useState([]);
   const [clockNow, setClockNow] = useState(Date.now());
@@ -7608,9 +7610,32 @@ export default function OutfitWorkflow({
     if (activeView !== "outfit") return;
     window.requestAnimationFrame(() => {
       const grid = taskGridRef.current;
-      if (grid) grid.scrollTop = grid.scrollHeight;
+      if (!grid) return;
+      // 2026-09-26：结果网格不再自己滚动（整页只有一条滚动条），
+      // 所以"自动看到最新结果"改成把外层滚动容器调到让结果区底部对齐可视区底部。
+      const scroller = grid.closest(".outfitScrollArea");
+      if (!scroller) return;
+      const delta = grid.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom;
+      if (delta > 0) scroller.scrollTop += delta;
     });
   }, [activeView, visibleTasks.length, tasks.length, galleryCardMin]);
+
+  // 只读提示词框随内容自撑高度：整页只保留主内容区那一条滚动条，框内不再出现第二条。
+  // 首选交给 CSS 的 field-sizing: content（浏览器自己按内容定高）；不支持该属性时再用 JS 兜底。
+  // 注意不能让 JS 直接写死像素高度 —— 那会和 field-sizing 打架，反而把内容裁掉。
+  useEffect(() => {
+    const el = promptLiveWrapRef.current?.querySelector("textarea");
+    if (!el) return;
+    const supportsFieldSizing = typeof CSS !== "undefined"
+      && typeof CSS.supports === "function"
+      && CSS.supports("field-sizing", "content");
+    if (supportsFieldSizing) {
+      el.style.height = "";
+      return;
+    }
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 480)}px`;
+  }, [outfitPreview.prompt]);
 
   useEffect(() => {
     if (!preview) return undefined;
@@ -10950,33 +10975,59 @@ function buildTasks(countOverride = plannedGenerationCount) {
           </div>
 
           <label className="composerField">
-            <span>{promptFieldTitle}</span>
-            <DebouncedTextarea
-              value={settings.prompt}
-              onChange={(value) => updateSetting("prompt", value)}
-              onKeyDown={handlePromptKeyDown}
-              placeholder={promptFieldPlaceholder}
-            />
+            <span>
+              {promptFieldTitle}
+              {isOutfitWorkflow && (
+                <em className="composerFieldHint">只读 · 随换装设置实时更新，这就是实际发送的内容</em>
+              )}
+            </span>
+            {/* 2026-09-26（按用户反馈）：批量换装的这个框**直接显示**实时编译结果，
+                不再另开一个"实际提示词"框。
+                它必须是只读的 —— 因为内容由「换装设置 + 图2事实 + 你自己的补充」实时算出来，
+                如果还允许手打，下一次改设置就会把手工内容覆盖掉（那就变成静默丢字）。
+                你自己的补充要求写下面那个「{productNoteFieldTitle}」框，它会实时进到这个框的第一段。 */}
+            {isOutfitWorkflow ? (
+              <div className="outfitPromptLiveWrap" ref={promptLiveWrapRef}>
+                <DebouncedTextarea
+                  className="outfitPromptLive"
+                  value={outfitPreview.prompt}
+                  readOnly
+                  onKeyDown={handlePromptKeyDown}
+                  placeholder={promptFieldPlaceholder}
+                />
+              </div>
+            ) : (
+              <DebouncedTextarea
+                value={settings.prompt}
+                onChange={(value) => updateSetting("prompt", value)}
+                onKeyDown={handlePromptKeyDown}
+                placeholder={promptFieldPlaceholder}
+              />
+            )}
+            {isOutfitWorkflow && (
+              <div className="outfitPromptMeta">
+                <span>
+                  共 {outfitPreview.chars} 字（自动内容 {outfitPreview.autoChars}/{OUTFIT_AUTO_PROMPT_CHAR_LIMIT} 字）
+                  {String(settings.prompt || "").trim() ? " · 含你以前手写的那段" : ""}
+                </span>
+                {String(settings.prompt || "").trim() ? (
+                  <button
+                    className="outfitPromptClear"
+                    type="button"
+                    onClick={() => {
+                      updateSetting("prompt", "");
+                      addEvent("换装设置", "已清空手写提示词；现在的目标句由换装设置自动生成");
+                    }}
+                    title="结构化换装已经会自动生成同样的目标句，手写那段通常不再需要"
+                  >
+                    清空手写提示词
+                  </button>
+                ) : null}
+              </div>
+            )}
           </label>
 
-          {/* 2026-09-26（按用户反馈）：换装设置一改，这里立刻显示"真正会发出去的完整提示词"。
-              只读、常显、不需要点按钮 —— 客户一眼就能看到自己选的东西变成了什么。
-              这个框本身必须保持可编辑（那是用户的补充要求），所以实际的编译结果放在它正下方，
-              不能反过来把编译结果写进输入框，否则用户一打字就被覆盖。 */}
-          {isOutfitWorkflow && (
-            <section className="outfitLivePrompt" aria-label="实际发送的完整提示词">
-              <header>
-                <strong>实际发送的完整提示词</strong>
-                <span>随上面的换装设置实时更新 · 共 {outfitPreview.chars} 字（自动内容 {outfitPreview.autoChars}/{OUTFIT_AUTO_PROMPT_CHAR_LIMIT} 字）</span>
-              </header>
-              <pre>{outfitPreview.prompt}</pre>
-              <small>
-                「{promptFieldTitle}」里写的是你的补充要求，原样进【用户补充】；
-                下面这段是「换装设置 + 图2服装事实」编译出来的完整内容，也是服务端最终发送的内容
-                （服务端用同一个编译器，并会再补入智能介入文本）。
-              </small>
-            </section>
-          )}
+          {/* 2026-09-26：完整提示词已经直接显示在「通用换装提示词」框里，这里不再重复一份。 */}
 
           <label className="composerField composerNote">
             <span>{productNoteFieldTitle}</span>

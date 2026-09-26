@@ -521,7 +521,10 @@ export function compileOutfitPrompt(options = {}) {
   if (wearing) sections.push({ id: "wearing", title: "【穿法状态】", body: wearing });
   sections.push({ id: "baseline", title: "【人物基准】", body: OUTFIT_PERSON_BASELINE });
 
-  const prompt = sections.map((section) => `${section.title}\n${section.body}`).join("\n\n");
+  // 2026-09-26（按用户要求）：发给模型的是**纯正文**，不带【本次换装目标】【穿法状态】这类小标题 ——
+  // 标题只是界面上的分区说明，不该占提示词。顺序仍然保持需求规定的顺序。
+  // `sections` 仍带 title，只给界面/测试看结构，不进入 prompt。
+  const prompt = sections.map((section) => section.body).join("\n\n");
   const autoChars = sections
     .filter((section) => section.id !== "user")
     .reduce((sum, section) => sum + section.body.length, 0);

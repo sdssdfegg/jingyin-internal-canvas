@@ -814,9 +814,13 @@
   grid-template-columns: repeat(auto-fill, minmax(var(--asset-card-min, 176px), 1fr));
   gap: 12px;
   margin-top: 12px;
-  max-height: min(58vh, 620px);
-  overflow: auto;
-  padding-right: 4px;
+  /* 2026-09-26（按用户反馈）：结果网格原来自己带 max-height + overflow:auto，
+     于是右侧同时有一条"结果区滚动条"和一条"上传区滚动条"。现在去掉它自己的滚动，
+     结果图 + 图1~图3 + 换装设置 共用外面 `.outfitScrollArea` 那一条滚动条。
+     自动滚到最新结果改由 js 调整外层 scrollTop 实现（见 index 里的 taskGridRef 效果）。 */
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .outfitWorkflowEmbedded .taskCard {

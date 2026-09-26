@@ -80,21 +80,24 @@ Object.entries(layers).forEach(([value, expected]) => {
 check("内搭/外套/内搭+外套三种文字互不相同",
   new Set([layers.inner, layers.outer, layers["inner-outer"]]).size === 3);
 
-// —— 3b) 需求里给出的那条完整原文
+// —— 3b) 需求里给出的那条完整原文（纯正文，不带【】小标题）
 const required = compiled({ parts: ["upper"], upperLayer: "inner-outer" });
 check("『内搭+外套、下装不变、鞋子不变』完整原文与需求一致",
   required.prompt === [
-    "【本次换装目标】",
     "让图1模特穿着图2的内搭和外套。",
     "图1的下装和鞋子保持不变。",
     "",
-    "【穿法状态】",
     "穿法跟随图2，不自行改变扣合、衣摆、袖子和领口状态。",
     "",
-    "【人物基准】",
     OUTFIT_PERSON_BASELINE
   ].join("\n"),
   JSON.stringify(required.prompt));
+check("发给模型的最终提示词不含任何【】小标题",
+  !/【[^】]*】/.test(required.prompt),
+  required.prompt.slice(0, 60));
+check("界面用的 sections 仍保留分区标题（结构可见、只是不进提示词）",
+  required.sections.length > 0 && required.sections.every((section) => /^【.+】$/.test(section.title)),
+  required.sections.map((section) => section.title).join(""));
 
 // —— 4) 人物基准只出现一次
 const once = compiled({ parts: ["upper", "lower"], upperLayer: "single" });
@@ -113,7 +116,7 @@ check("SKILL/智能介入关闭时换装目标仍在",
 check("SKILL/智能介入开与关，换装目标完全相同",
   skillOff.targets === skillOn.targets && skillOff.keep === skillOn.keep && skillOff.wearing === skillOn.wearing);
 check("用户原话原样保留",
-  skillOff.prompt.includes("【用户补充】\n用户原话") && skillOn.prompt.includes("用户原话"));
+  skillOff.prompt.startsWith("用户原话") && skillOn.prompt.startsWith("用户原话"));
 
 // —— 6) 自定义穿法真实进入提示词
 const custom = compiled({
@@ -186,7 +189,10 @@ const lowerFacts = outfitFactsText(intent({ parts: ["lower"], facts: factsIntent
 check("只选下装时事实只含下装项",
   lowerFacts.includes("直筒牛仔裤") && !lowerFacts.includes("衬衫") && !lowerFacts.includes("白色运动鞋"),
   lowerFacts);
-check("未分析时事实段整段省略", compiled({ parts: ["upper"] }).prompt.includes("【图2服装事实】") === false);
+const noFacts = compiled({ parts: ["upper"] });
+check("未分析时事实段整段省略（连「未识别」都不留）",
+  noFacts.facts === "" && !noFacts.prompt.includes("未识别") && !noFacts.prompt.includes("【"),
+  JSON.stringify(noFacts.prompt));
 
 // —— 8) 同一信息不重复三遍
 const dedupe = compileOutfitPrompt({

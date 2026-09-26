@@ -232,21 +232,25 @@ try {
   });
   check("自定义穿法覆盖后图2事实不再重复扣合/衣摆/袖子",
     !custom.prompt.includes("门襟四颗扣子") && !custom.prompt.includes("衣摆外穿") && !custom.prompt.includes("袖子放下"),
-    (custom.prompt.match(/【图2服装事实】\n([^\n]*)/) || [])[1] || "(无事实段)");
+    (custom.prompt.match(/类别与内外层[^\n]*/) || [])[0] || "(无事实行)");
   check("『保持不变』在上游提示词里只出现一次", custom.prompt.split("保持不变").length - 1 === 1);
+  // 2026-09-26（按用户要求）：发给模型的提示词是纯正文，不带【】分区小标题。
+  check("上游最终提示词不含任何【】小标题", !/【[^】]*】/.test(custom.prompt), custom.prompt.slice(0, 80));
 
   // —— 6) 图2事实只插入所选部位
   const factsOnly = { category: "衬衫", color: "白色", lowerType: "直筒牛仔裤", shoeType: "白色运动鞋" };
   const upperOnly = await promptFor("facts-upper", { parts: ["upper"], upperLayer: "single", facts: factsOnly });
   check("只选上装时上游事实不含下装/鞋子",
     upperOnly.prompt.includes("衬衫") && !upperOnly.prompt.includes("直筒牛仔裤") && !upperOnly.prompt.includes("白色运动鞋"),
-    (upperOnly.prompt.match(/【图2服装事实】\n([^\n]*)/) || [])[1] || "(无事实段)");
+    (upperOnly.prompt.match(/[^\n]*衬衫[^\n]*/) || [])[0] || "(无事实行)");
   const lowerOnly = await promptFor("facts-lower", { parts: ["lower"], upperLayer: "single", facts: factsOnly });
   check("只选下装时上游事实只含下装项",
     lowerOnly.prompt.includes("直筒牛仔裤") && !lowerOnly.prompt.includes("衬衫") && !lowerOnly.prompt.includes("白色运动鞋"),
-    (lowerOnly.prompt.match(/【图2服装事实】\n([^\n]*)/) || [])[1] || "(无事实段)");
-  check("没有事实时整段省略",
-    !(await promptFor("facts-none", { parts: ["upper"], upperLayer: "single", facts: {} })).prompt.includes("【图2服装事实】"));
+    (lowerOnly.prompt.match(/[^\n]*直筒牛仔裤[^\n]*/) || [])[0] || "(无事实行)");
+  const noFacts = await promptFor("facts-none", { parts: ["upper"], upperLayer: "single", facts: {} });
+  check("没有事实时整段省略（不留空行、不留字段名）",
+    !noFacts.prompt.includes("类别与内外层") && !noFacts.prompt.includes("未识别"),
+    JSON.stringify(noFacts.prompt));
 
   // —— 7) 非法枚举 400
   const badCases = [
