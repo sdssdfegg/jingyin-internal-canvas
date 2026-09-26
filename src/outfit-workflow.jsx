@@ -107,6 +107,78 @@ const OUTFIT_DRAFT_DB_KEY = "page-draft";
 const OUTFIT_RESULT_IMAGE_CACHE_PREFIX = "result-image-cache:";
 const OUTFIT_TEMP_IMAGE_CACHE_PREFIX = "temp-image-cache:";
 const OUTFIT_SESSION_ID = `outfit_session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+// 2026-09-26 批量结果恢复：区分「浏览器整页刷新/首次打开」和「应用内切换左侧页面」。
+// 左侧导航切走会把 OutfitWorkflow 整个卸载（main.jsx 是条件渲染），再切回来是**组件重挂载**，
+// 不是页面刷新。模块级变量随 JS 文档一起重建，所以：
+//   - 本文档里第一次挂载 = 真的刚刚加载/刷新过页面；
+//   - 之后再挂载 = 应用内切换页面。
+// 只有前者才允许把"当时还在跑"的任务写成"刷新中断"。
+let outfitWorkflowDocumentBooted = false;
+
+// 本文档创建过的对象 URL（blob:）集合。
+// 用途：blob: 地址只在创建它的那个文档里有效。
+//   - 应用内切换页面 → 同一个文档 → 地址还有效，能继续显示（不能提前 revoke）；
+//   - 整页刷新 → 旧地址已死 → 必须显示真实的失效原因，而不是伪装成"结果已保存"。
+const documentObjectUrls = new Set();
+
+function createDocumentObjectUrl(blob) {
+  const url = URL.createObjectURL(blob);
+  documentObjectUrls.add(url);
+  return url;
+}
+
+function isLiveDocumentObjectUrl(url) {
+  return typeof url === "string" && url.startsWith("blob:") && documentObjectUrls.has(url);
+}
+
+/**
+ * 跨组件挂载周期存活的「批量生成运行账本」。
+ *
+ * 为什么需要它（2026-09-26 第二轮）：
+ *   左侧导航切走会卸载 OutfitWorkflow，但生成请求和它的回调是普通闭包，会继续跑完。
+ *   只有页面草稿这一条持久化通道时会出现一个空窗：
+ *   用户切走 → 又很快切回来（这一轮还没跑完）→ 草稿里那一条还是 running/queued → 被恢复成
+ *   "切换页面时这一轮还没返回结果"；等它真的跑完时，新挂载的组件既不知道这条任务存在，
+ *   也没人把结果推给它，于是卡片永远停在"待确认"。
+ *
+ * 账本把「正在跑 / 刚跑完」的任务快照放在模块级（不随组件卸载消失）：
+ *   - 重挂载时先接上账本 → 还在跑就继续显示"生成中"，跑完了就直接收敛成结果；
+ *   - 跑完的那一刻通过订阅者推给当前挂载的组件（如果它在看这一页）；
+ *   - 组件不在看这一页/没挂载时，走已有的 persistFinishedTaskWhileDetached() 写回页面草稿。
+ * 只存任务快照（结果地址是服务端的 /api/result/...，不是大 Blob），不新建第二套缓存。
+ */
+const outfitLiveRuns = new Map(); // taskId -> { task, updatedAt }
+const outfitLiveRunSubscribers = new Set();
+const OUTFIT_LIVE_RUN_LIMIT = 60;
+
+function publishOutfitLiveRun(task) {
+  if (!task?.id) return;
+  // 只留任务元数据 + 结果地址（sanitizeTaskHistoryItem 会剥掉上传图/对象 URL 等运行时缓存，
+  // 避免账本把大 File/Blob 一直钉在内存里）；sessionId 额外保留，
+  // 让"是否还有本会话在跑的任务"这套判断在重挂载后仍然成立。
+  const snapshot = { ...sanitizeTaskHistoryItem(task), sessionId: task.sessionId || "" };
+  if (!snapshot.id) return;
+  outfitLiveRuns.set(snapshot.id, { task: snapshot, updatedAt: Date.now() });
+  if (outfitLiveRuns.size > OUTFIT_LIVE_RUN_LIMIT) {
+    const ordered = [...outfitLiveRuns.values()].sort((a, b) => a.updatedAt - b.updatedAt);
+    ordered.slice(0, outfitLiveRuns.size - OUTFIT_LIVE_RUN_LIMIT)
+      .forEach((entry) => outfitLiveRuns.delete(entry.task.id));
+  }
+  outfitLiveRunSubscribers.forEach((listener) => {
+    try {
+      listener(snapshot);
+    } catch {
+      // 订阅者自身出错不影响生成流程
+    }
+  });
+}
+
+function outfitLiveRunsForPage(pageName) {
+  const list = [...outfitLiveRuns.values()].map((entry) => entry.task);
+  if (!pageName) return list;
+  return list.filter((task) => !task.pageName || task.pageName === pageName);
+}
 const RESULT_IMAGE_PRELOAD_TIMEOUT_MS = 20000;
 const VIDEO_STATUS_POLL_INTERVAL_MS = 4000;
 const VIDEO_STATUS_MAX_POLLS = 180;
@@ -2051,16 +2123,46 @@ function isRefreshInterruptedTask(task) {
   return /页面刷新后任务已中断|页面刷新会中断当前浏览器里的批量生成 worker/.test(text);
 }
 
-function detachPersistedTask(task) {
+// 中断任务的真实原因文案（整页刷新 / 应用内切页面 两种情况分开写）。
+// 2026-09-26：原来统一写"页面已刷新，结果请到保存目录确认" —— 两个问题：
+//   ① 应用内切换左侧页面并不是刷新；② 客户端拿到图之前不会自动保存，
+//   所以"结果请到保存目录确认"对大多数中断都不成立（用户看到的正是这条误报）。
+// 只有确实保存过（task.savedPath 有值）时才提保存目录。
+function detachedTaskMessage(task, reason) {
+  const byPageSwitch = reason === "page-switch";
+  const savedPath = String(task?.savedPath || "").trim();
+  return {
+    error: byPageSwitch ? "切换页面时这一轮还没返回结果" : "整页刷新中断了这一轮生成",
+    errorDetail: savedPath
+      ? `这不是模型失败。这张结果已经保存到：${savedPath}`
+      : byPageSwitch
+        // 实测：切页面只是卸载组件，生成请求与"返回后自动保存"这段闭包还会继续跑完，
+        // 所以图片**可能已经落盘**，只是页面这边不再更新。这里如实说明，不承诺也不否认。
+        ? "切页面后这一轮的响应不再回写到本页。若上游已经返回，图片会照常自动保存到指定文件夹（可到保存目录确认）；也可以点“重试”重新生成。"
+        : "整页刷新会断开浏览器与本轮生成的连接，结果没有回传到页面，也没有自动保存。可以点“重试”重新生成。",
+    runtimeStage: byPageSwitch ? "切换页面后待恢复" : "刷新后待确认"
+  };
+}
+
+// 旧版本（V9 起）落盘过的"页面已刷新，结果请到保存目录确认"：恢复时按真实原因改写一次。
+// 只改这三条展示文案，不动状态、时间、结果和保存记录。
+const LEGACY_DETACHED_MESSAGE = "页面已刷新，结果请到保存目录确认";
+
+function refreshDetachedTaskMessage(task, options = {}) {
+  if (task?.status !== "detached") return task;
+  const text = `${task.error || ""}\n${task.errorDetail || ""}`;
+  if (!text.includes(LEGACY_DETACHED_MESSAGE)) return task;
+  return { ...task, ...detachedTaskMessage(task, options.detachReason) };
+}
+
+function detachPersistedTask(task, reason = "reload") {
   const finishedAt = Date.now();
   const startedAt = Number(task.startedAt || task.createdAt || finishedAt);
   return {
     ...task,
     status: "detached",
-    error: "页面已刷新，结果请到保存目录确认",
-    errorDetail: "这不是模型失败。页面刷新会断开浏览器当前任务响应；如果后台或上游已经完成，结果图可能已经保存到指定文件夹。没有看到结果时再重新生成。",
-    runtimeStage: "刷新后待确认",
-    runtimeDetail: task.runtimeStage ? `刷新前：${taskRuntimeStageLabel(task)}` : "原任务可能仍在后台或上游继续完成",
+    ...detachedTaskMessage(task, reason),
+    runtimeDetail: task.runtimeStage ? `中断前：${taskRuntimeStageLabel(task)}` : "原任务可能仍在后台或上游继续完成",
     runtimeUpdatedAt: finishedAt,
     timingMs: Math.max(1, finishedAt - startedAt),
     finishedAt,
@@ -2120,11 +2222,17 @@ function stripRuntimeResultImageCache(image) {
     ...rest
   } = image;
   if (image.type === "local_blob") {
-    if (!image.localUrl) return null;
+    // 局部回贴/扩图这类"浏览器本地合成"的结果：优先用 /api/result 持久地址；
+    // 缓存失败时只剩本次文档里的 blob: 地址——**也要写下去**，否则页面切走再切回来
+    // 这张图就直接没了（原来这里返回 null，等于把结果丢掉）。
+    // 这个地址在整页刷新后一定失效，恢复时会按"临时地址已失效"显示真实原因。
+    const fallbackUrl = String(image.localUrl || cachedUrl || image.value || "");
+    if (!fallbackUrl) return null;
     return {
       ...rest,
       type: "url",
-      value: image.localUrl
+      value: fallbackUrl,
+      ...(image.localUrl ? { localUrl: image.localUrl } : {})
     };
   }
   return rest;
@@ -2133,14 +2241,44 @@ function stripRuntimeResultImageCache(image) {
 function revokeResultImageRuntimeCache(image) {
   const url = image?.cachedUrl;
   if (typeof url === "string" && url.startsWith("blob:")) {
+    documentObjectUrls.delete(url);
     try {
       URL.revokeObjectURL(url);
     } catch {}
   }
 }
 
+// 结果是否已经有"可恢复地址"（不是本次文档的 blob: 临时地址）。
+// 有可恢复地址 → 切页面 / 重挂载后能用这个地址重新显示，内存里的对象 URL 可以立刻释放；
+// 只有 blob: 临时地址 → 不能 revoke，否则切回来这张图就再也拿不到了。
+function hasRestorableResultAddress(image) {
+  if (!image || typeof image !== "object") return false;
+  return [image.localUrl, image.value].some((value) => {
+    const text = String(value || "").trim();
+    return Boolean(text) && !text.startsWith("blob:");
+  });
+}
+
+function revokeRestorableTaskResultImageCaches(tasks = []) {
+  (Array.isArray(tasks) ? tasks : []).forEach((task) => {
+    if (hasRestorableResultAddress(task?.result)) revokeResultImageRuntimeCache(task?.result);
+  });
+}
+
 function revokeTaskResultRuntimeCaches(tasks = []) {
   (Array.isArray(tasks) ? tasks : []).forEach((task) => revokeResultImageRuntimeCache(task?.result));
+}
+
+// 恢复时判读"只剩 blob: 临时地址、而且这个地址已经不是本文档创建的" → 真实失效。
+// 不再让这种记录显示成莫名其妙的空白卡片，也不会拿这个死地址去发请求。
+function markExpiredTempResult(task) {
+  if (!task || typeof task !== "object") return task;
+  const src = imageSource(task.result);
+  if (!src.startsWith("blob:") || isLiveDocumentObjectUrl(src)) return task;
+  return {
+    ...task,
+    result: { ...task.result, missing: true, missingReason: "temp_blob_expired" }
+  };
 }
 
 function taskHasCropReturnResult(task) {
@@ -2259,7 +2397,7 @@ async function cacheResultImageBlob(image) {
     const cached = await outfitLocalGet(key, null);
     const cachedBlob = cachedResultBlobFromRecord(cached);
     if (cachedBlob) {
-      const cachedUrl = URL.createObjectURL(cachedBlob);
+      const cachedUrl = createDocumentObjectUrl(cachedBlob);
       return {
         ...image,
         cachedUrl,
@@ -2274,7 +2412,7 @@ async function cacheResultImageBlob(image) {
     const blob = await fetchBlobWithTimeout(displayImageRequestUrl(source));
     if (!blob || blob.size <= 0) return image;
     const createdAt = Date.now();
-    const cachedUrl = URL.createObjectURL(blob);
+    const cachedUrl = createDocumentObjectUrl(blob);
     await outfitLocalSet(key, {
       blob,
       mimeType: blob.type || image.archiveMime || image.mimeType || "image/png",
@@ -2806,28 +2944,104 @@ function sanitizeTaskHistoryItem(task) {
   };
 }
 
-function recoverPersistedTask(task) {
+function recoverPersistedTask(task, options = {}) {
   const item = sanitizeTaskHistoryItem(task);
   if (!item) return null;
-  if (isRefreshInterruptedTask(item)) return detachPersistedTask(item);
-  if (!hasGenerationPendingStatus(item)) return item;
-  return detachPersistedTask(item);
+  const recovered = markExpiredTempResult(refreshDetachedTaskMessage(item, options));
+  if (isRefreshInterruptedTask(recovered)) return detachPersistedTask(recovered, options.detachReason);
+  if (!hasGenerationPendingStatus(recovered)) return recovered;
+  return detachPersistedTask(recovered, options.detachReason);
 }
 
-function recoverPersistedTasks(tasks = []) {
-  return (Array.isArray(tasks) ? tasks : []).map(recoverPersistedTask).filter(Boolean);
+function recoverPersistedTasks(tasks = [], options = {}) {
+  return (Array.isArray(tasks) ? tasks : []).map((task) => recoverPersistedTask(task, options)).filter(Boolean);
+}
+
+/**
+ * 把「持久任务历史里的已完成结果」合并回当前任务列表。
+ *
+ * 为什么需要它（2026-09-26 结果丢失问题）：
+ *   页面草稿（page-draft）里存的是**最后一次落盘的实时状态**，任务历史（task-history）里
+ *   存的是**已经成功的结果**。原实现是二选一：
+ *       hasLiveResults ? current : [...hydratedHistory, ...runningItems]
+ *   只要草稿里还有任意一条成功结果，就把整份历史丢掉 —— 于是"草稿里还停在运行中、
+ *   但历史里其实已经成功"的那几条永远恢复不回来，只能被显示成"刷新中断"。
+ *   现在改成按任务 id 合并：历史里已经成功且有可显示地址的，就用历史那条覆盖。
+ */
+function mergeOutfitTasksWithHistory(currentTasks = [], historyTasks = []) {
+  const current = Array.isArray(currentTasks) ? currentTasks : [];
+  const history = Array.isArray(historyTasks) ? historyTasks : [];
+  if (history.length === 0) return current;
+  if (current.length === 0) return history;
+  const historyById = new Map(history.map((task) => [task.id, task]));
+  const seen = new Set();
+  const merged = current.map((task) => {
+    seen.add(task.id);
+    const persisted = historyById.get(task.id);
+    if (!persisted) return task;
+    // 只接受"已经成功 + 有可显示地址"的持久记录，失败/中断记录不覆盖当前状态。
+    if (persisted.status !== "success" || !imageSource(persisted.result)) return task;
+    if (task.status === "success" && imageSource(task.result)) return task;
+    // 保留当前这条的上传引用（历史里只有 id/名字），其余以持久结果为准。
+    return {
+      ...task,
+      ...persisted,
+      modelItem: task.modelItem,
+      clothingItem: task.clothingItem,
+      extraModelItems: task.extraModelItems,
+      extraClothingItems: task.extraClothingItems,
+      outpaintReferenceItems: task.outpaintReferenceItems,
+      referenceItems: task.referenceItems
+    };
+  });
+  history.forEach((task) => {
+    if (!seen.has(task.id)) merged.push(task);
+  });
+  return merged;
 }
 
 function readTaskHistory() {
-  return recoverPersistedTasks(readJsonStorage(TASK_HISTORY_KEY, []));
+  return recoverPersistedTasks(readJsonStorage(TASK_HISTORY_KEY, []), { detachReason: "reload" });
 }
 
 async function readTaskHistoryAsync() {
   const idbHistory = await outfitLocalGet(OUTFIT_TASK_HISTORY_DB_KEY, null);
   if (Array.isArray(idbHistory)) {
-    return recoverPersistedTasks(idbHistory);
+    return recoverPersistedTasks(idbHistory, { detachReason: "reload" });
   }
   return readTaskHistory();
+}
+
+/**
+ * 把「跨挂载周期账本里的任务快照」合并进当前任务列表。
+ * 见 outfitLiveRuns 的说明：这是"切走又切回来"时不再误判成中断的关键。
+ * 规则：
+ *   - **只更新列表里已经有的任务**，绝不新增。否则用户删掉一条结果后，账本会在
+ *     下次切页面时把它"复活"回来（账本是按 id 覆盖的补充信息，不是第二份任务列表）；
+ *   - 已经成功且有图的任务不被账本里的"运行中"降级；
+ *   - 匹配上的任务以账本快照为准（它是同一轮生成的最新状态）。
+ */
+function mergeOutfitLiveRuns(currentTasks = [], liveTasks = []) {
+  const current = Array.isArray(currentTasks) ? currentTasks : [];
+  const live = Array.isArray(liveTasks) ? liveTasks : [];
+  if (live.length === 0) return current;
+  const liveById = new Map(live.map((task) => [task.id, task]));
+  if (!current.some((task) => liveById.has(task.id))) return current;
+  return current.map((task) => {
+    const snapshot = liveById.get(task.id);
+    if (!snapshot) return task;
+    if (task.status === "success" && imageSource(task.result) && snapshot.status !== "success") return task;
+    return {
+      ...task,
+      ...snapshot,
+      modelItem: task.modelItem,
+      clothingItem: task.clothingItem,
+      extraModelItems: task.extraModelItems,
+      extraClothingItems: task.extraClothingItems,
+      outpaintReferenceItems: task.outpaintReferenceItems,
+      referenceItems: task.referenceItems
+    };
+  });
 }
 
 async function persistTaskHistory(items) {
@@ -4147,12 +4361,12 @@ function serializeDraftPage(page) {
   };
 }
 
-function hydrateDraftPage(page) {
+function hydrateDraftPage(page, options = {}) {
   const pageName = normalizeOutfitPageName(page?.name, DEFAULT_OUTFIT_PAGE_NAME);
   const modelImages = (page?.modelImages || []).map(hydrateDraftImageItem).filter(Boolean);
   const clothingImages = (page?.clothingImages || []).map(hydrateDraftImageItem).filter(Boolean);
   const referenceImages = (page?.referenceImages || []).map(hydrateDraftImageItem).filter(Boolean);
-  const tasks = hydrateTasksWithUploadReferences(recoverPersistedTasks(page?.tasks), {
+  const tasks = hydrateTasksWithUploadReferences(recoverPersistedTasks(page?.tasks, options), {
     modelImages,
     clothingImages,
     referenceImages
@@ -4177,15 +4391,69 @@ async function persistOutfitDraftState(pages, activeId) {
   });
 }
 
-async function loadOutfitDraftState() {
+async function loadOutfitDraftState(options = {}) {
   const draft = await outfitLocalGet(OUTFIT_DRAFT_DB_KEY, null);
   if (!draft || !Array.isArray(draft.pages) || draft.pages.length === 0) return null;
-  const pages = draft.pages.map(hydrateDraftPage).filter(Boolean);
+  const pages = draft.pages.map((page) => hydrateDraftPage(page, options)).filter(Boolean);
   if (!pages.length) return null;
   return {
     activeId: pages.some((page) => page.id === draft.activeId) ? draft.activeId : pages[0].id,
     pages
   };
+}
+
+/**
+ * 「切页面时还在生成、随后才完成/失败」的那一条结果，就地登记回页面草稿。
+ *
+ * 背景（2026-09-26 结果丢失问题）：
+ *   左侧导航切走会把 OutfitWorkflow 整个卸载（main.jsx 是条件渲染），React state 随之消失。
+ *   但生成请求和它后面的 `autoSaveTask()` 是普通闭包，会继续跑完 —— 也就是说图片**确实生成、
+ *   也确实自动保存到了指定文件夹**，只是页面这边再也写不回状态：草稿里那一条永远停在
+ *   running/queued，切回来就被恢复成"中断/待确认"，用户看到的就是"结果不能查看"。
+ *
+ * 这里用现有的 page-draft 存储，按任务 id 把这一条就地 upsert 成终态（成功或失败）：
+ *   - 不新建第二套缓存；
+ *   - 不重复写（同一个 id 只覆盖，不追加）；
+ *   - 不碰其它页面的任务；
+ *   - 只在组件已经卸载时调用（挂载状态下由原来的持久化 effect 负责）。
+ */
+async function persistFinishedTaskWhileDetached(task, savePromise) {
+  try {
+    const saved = savePromise ? await Promise.resolve(savePromise).catch(() => null) : null;
+    const finished = saved
+      ? {
+          ...task,
+          savedFilename: saved.filename || task.savedFilename || "",
+          savedPath: saved.path || task.savedPath || "",
+          autoSaveFailed: false
+        }
+      : task;
+    const item = sanitizeTaskHistoryItem(finished);
+    if (!item) return;
+    if (item.status !== "success" && item.status !== "failed") return;
+    if (item.status === "success" && !imageSource(item.result)) return;
+
+    const draft = await outfitLocalGet(OUTFIT_DRAFT_DB_KEY, null);
+    if (!draft || !Array.isArray(draft.pages) || draft.pages.length === 0) return;
+    let changed = false;
+    const pages = draft.pages.map((page) => {
+      const pageTasks = Array.isArray(page?.tasks) ? page.tasks : [];
+      const index = pageTasks.findIndex((entry) => entry?.id === item.id);
+      const isTargetPage = index >= 0 || (item.pageName && page?.name === item.pageName);
+      if (!isTargetPage) return page;
+      changed = true;
+      if (index >= 0) {
+        const nextTasks = [...pageTasks];
+        nextTasks[index] = { ...nextTasks[index], ...item };
+        return { ...page, tasks: nextTasks };
+      }
+      return { ...page, tasks: [...pageTasks, item].slice(-500) };
+    });
+    if (!changed) return;
+    await outfitLocalSet(OUTFIT_DRAFT_DB_KEY, { ...draft, pages, updatedAt: Date.now() });
+  } catch {
+    // 组件已卸载时的补登记失败不抛错：下一次整页刷新/重新生成仍然可用。
+  }
 }
 
 function moveItemByDrop(items, fromId, toId, placement) {
@@ -6871,6 +7139,14 @@ export default function OutfitWorkflow({
   const resultImageCacheInFlightRef = useRef(new Set());
   const draftHydratingRef = useRef(false);
   const historyHydratingRef = useRef(false);
+  // 防抖中的草稿快照：卸载时立即补写，避免"刚生成完就切页面"把最新状态丢掉。
+  const pendingDraftSnapshotRef = useRef(null);
+  // 组件是否还挂载：切页面会卸载 OutfitWorkflow，卸载后 setState 不再生效，
+  // 需要在生成完成时把结果直接补登记进页面草稿（见 persistFinishedTaskWhileDetached）。
+  const outfitMountedRef = useRef(true);
+  // 当前页面正在显示的任务 id：用来判断"这一条完成时用户是不是正看着它"。
+  // 正看着 → 交给正常的持久化 effect；没看着（切了页面 / 切了批量分区）→ 直接补登记草稿。
+  const visibleTaskIdsRef = useRef(new Set());
   const [draftReady, setDraftReady] = useState(false);
   const [historyReady, setHistoryReady] = useState(false);
 
@@ -6923,6 +7199,9 @@ export default function OutfitWorkflow({
   const failedCount = tasks.filter((task) => task.status === "failed").length;
   const runningCount = tasks.filter((task) => task.status === "running").length;
   const detachedCount = tasks.filter((task) => task.status === "detached").length;
+  // 只要列表里还有排队/生成中的任务，就让耗时秒数继续走：
+  // 切页面回来时组件自己的 running 状态已经重置，但账本恢复出来的"生成中"卡片仍要能读秒。
+  const hasPendingTasks = tasks.some((task) => task.status === "running" || task.status === "queued");
   const imageCount = completedCount;
   const visibleTasks = resultFilter === "video" ? [] : resultFilter === "image" ? tasks.filter((task) => task.result) : tasks;
   const resultPreviewTasks = visibleTasks.filter((task) => task.result);
@@ -7060,10 +7339,28 @@ export default function OutfitWorkflow({
 
   useEffect(() => {
     tasksRef.current = tasks;
+    visibleTaskIdsRef.current = new Set(tasks.map((task) => task.id));
   }, [tasks]);
 
+  // 订阅跨挂载周期的生成账本：切走又切回来时，这一轮跑完的那一刻能把结果推给当前页面。
+  useEffect(() => {
+    const listener = (liveTask) => {
+      setTasks((current) => (current.some((task) => task.id === liveTask.id)
+        ? mergeOutfitLiveRuns(current, [liveTask])
+        : current));
+    };
+    outfitLiveRunSubscribers.add(listener);
+    return () => outfitLiveRunSubscribers.delete(listener);
+  }, []);
+
+  // 卸载清理（2026-09-26 修正）：
+  //   1) 只释放"已经有可恢复地址"的结果的对象 URL —— 这类结果切页面回来后用 /api/result
+  //      或上传引用就能重新显示，blob: 可以立刻释放，不会越切越占内存；
+  //   2) 只靠 blob: 临时地址的结果**不 revoke**，否则"切页面再切回来"这张图就没了。
+  // 结果的真正释放走 clearAll / 删除 / 原位重刷那几条路径。
   useEffect(() => () => {
-    revokeTaskResultRuntimeCaches(tasksRef.current);
+    outfitMountedRef.current = false;
+    revokeRestorableTaskResultImageCaches(tasksRef.current);
   }, []);
 
   useEffect(() => {
@@ -7099,11 +7396,9 @@ export default function OutfitWorkflow({
           clothingImages,
           referenceImages
         });
-        setTasks((current) => {
-          const runningItems = current.filter(isLiveGenerationTask);
-          const hasLiveResults = current.some((task) => task.status === "success" && imageSource(task.result));
-          return hasLiveResults ? current : [...hydratedHistory, ...runningItems];
-        });
+        // 2026-09-26：不再"草稿里有结果就丢掉整份历史"。
+        // 按任务 id 合并：历史里已经成功的结果优先，页面切换/重挂载后不会再退回成"刷新中断"。
+        setTasks((current) => mergeOutfitTasksWithHistory(current, hydratedHistory));
       })
       .finally(() => {
         if (!cancelled) {
@@ -7119,7 +7414,12 @@ export default function OutfitWorkflow({
   useEffect(() => {
     let cancelled = false;
     draftHydratingRef.current = true;
-    loadOutfitDraftState()
+    // 2026-09-26：只有"真正的整页刷新/首次打开"才允许把还停在 running/queued 的任务
+    // 标成刷新中断。左侧导航切走再切回来只是组件重挂载，同一个文档里的 blob: 地址还有效，
+    // 不能按刷新处理（那正是用户看到的"页面已刷新，结果请到保存目录确认"误报来源）。
+    const documentBoot = !outfitWorkflowDocumentBooted;
+    outfitWorkflowDocumentBooted = true;
+    loadOutfitDraftState({ detachReason: documentBoot ? "reload" : "page-switch" })
       .then((draft) => {
         if (cancelled || !draft?.pages?.length) return;
         const pages = ensureWorkflowPages(draft.pages, readSettings());
@@ -7127,6 +7427,10 @@ export default function OutfitWorkflow({
         setOutfitPages(pages);
         setActiveOutfitPageId(activePage.id);
         loadOutfitPage(activePage);
+        // 2026-09-26：接上跨挂载周期的生成账本。
+        // 切走又很快切回来时，草稿里这一条还是 running/queued；账本里如果它还在跑就继续
+        // 显示"生成中"，已经跑完就直接收敛成结果 —— 不再误判成"切换页面时这一轮还没返回结果"。
+        setTasks((current) => mergeOutfitLiveRuns(current, outfitLiveRunsForPage(activePage.name)));
       })
       .finally(() => {
         if (!cancelled) {
@@ -7235,7 +7539,10 @@ export default function OutfitWorkflow({
     const pages = ensureWorkflowPages(outfitPages.map((page) => (
       page.id === activeOutfitPageId ? currentSnapshot : page
     )), settings);
+    // 记下最近一次待落盘的快照：卸载时用它补一次立即落盘（见下面的 unmount flush）。
+    pendingDraftSnapshotRef.current = { pages, activeId: activeOutfitPageId };
     const timer = window.setTimeout(() => {
+      pendingDraftSnapshotRef.current = null;
       void persistOutfitDraftState(pages, activeOutfitPageId);
     }, 350);
     return () => window.clearTimeout(timer);
@@ -7254,6 +7561,18 @@ export default function OutfitWorkflow({
     activeUploadGroup
   ]);
 
+  // 2026-09-26 结果丢失修复：
+  // 上面那个效果是 350ms 防抖，原来卸载时只 clearTimeout —— 也就是"最近 350ms 内的状态全部丢掉"。
+  // 批量刚生成完就点左侧导航切页面时，这条刚好把"已完成"抹掉，草稿里留在"运行中"，
+  // 切回来就被判成"刷新中断 / 请到保存目录确认"。
+  // 组件重挂载并不会丢内存状态的机会，所以这里在卸载时把待落盘快照立刻补写一次。
+  useEffect(() => () => {
+    const snapshot = pendingDraftSnapshotRef.current;
+    if (!snapshot) return;
+    pendingDraftSnapshotRef.current = null;
+    void persistOutfitDraftState(snapshot.pages, snapshot.activeId);
+  }, []);
+
   useEffect(() => {
     writeJsonStorage(PROMPT_PRESETS_KEY, promptPresets);
   }, [promptPresets]);
@@ -7263,11 +7582,11 @@ export default function OutfitWorkflow({
   }, [promptCategories]);
 
   useEffect(() => {
-    if (!running) return undefined;
+    if (!running && !hasPendingTasks) return undefined;
     setClockNow(Date.now());
     const timer = window.setInterval(() => setClockNow(Date.now()), 500);
     return () => window.clearInterval(timer);
-  }, [running]);
+  }, [running, hasPendingTasks]);
 
   useEffect(() => {
     if (!ratios.includes(settings.aspectRatio)) {
@@ -7795,12 +8114,17 @@ export default function OutfitWorkflow({
 
   function updateTaskRuntime(taskId, runtimeStage, runtimeDetail = "") {
     if (!taskId) return;
+    const runtimeUpdatedAt = Date.now();
     setTasks((current) => current.map((item) => item.id === taskId ? {
       ...item,
       runtimeStage,
       runtimeDetail,
-      runtimeUpdatedAt: Date.now()
+      runtimeUpdatedAt
     } : item));
+    // 同步进跨挂载周期账本：用户切走页面后，重挂载回来的卡片也能看到实时阶段
+    // （本地预处理 / 等待中转站返回 / 模型已返回 …），而不是停在开始那一刻的"准备任务"。
+    const latest = tasksRef.current.find((item) => item.id === taskId);
+    if (latest) publishOutfitLiveRun({ ...latest, runtimeStage, runtimeDetail, runtimeUpdatedAt });
   }
 
   function beginGenerationRun() {
@@ -8943,18 +9267,23 @@ export default function OutfitWorkflow({
     if (options.flash !== false) flashDownloadFeedback(taskId);
   }
 
+  // 返回保存结果（payload 或 null）：调用方在"组件已卸载"时需要拿到 savedPath
+  // 一起补登记进页面草稿，所以这里把结果返回出去（原来的 `void autoSaveTask(...)` 用法不受影响）。
   async function autoSaveTask(task, image) {
     try {
       const payload = await saveTaskImageToDirectory(task, image);
       markTaskSaved(task.id, payload, { flash: true });
+      return payload;
     } catch (error) {
       try {
         const payload = await saveTaskImageToDirectoryViaBlob(task, image);
         markTaskSaved(task.id, payload, { flash: true });
         addEvent("自动保存兜底", "已通过本地代理重新保存结果图");
+        return payload;
       } catch (fallbackError) {
         setTasks((current) => current.map((item) => item.id === task.id ? { ...item, autoSaveFailed: true } : item));
         addEvent("自动保存失败", fallbackError instanceof Error ? fallbackError.message : (error instanceof Error ? error.message : String(error)));
+        return null;
       }
     }
   }
@@ -9233,8 +9562,7 @@ function buildTasks(countOverride = plannedGenerationCount) {
           ? task.modelItem.localEdit
           : null;
     setClockNow(startedAt);
-    setTasks((current) => current.map((item) => item.id === task.id ? {
-      ...item,
+    const runningPatch = {
       sessionId: OUTFIT_SESSION_ID,
       status: "running",
       startedAt,
@@ -9243,7 +9571,10 @@ function buildTasks(countOverride = plannedGenerationCount) {
       runtimeStage: "准备任务",
       runtimeDetail: task.modelItem?.name ? `图1 ${task.modelItem.name}` : "",
       runtimeUpdatedAt: startedAt
-    } : item));
+    };
+    setTasks((current) => current.map((item) => (item.id === task.id ? { ...item, ...runningPatch } : item)));
+    // 跨挂载周期账本：切走再切回来时这一条继续显示"生成中"。
+    publishOutfitLiveRun({ ...task, ...runningPatch });
     if (localEdit) {
       updateTaskRuntime(task.id, "本地预处理", "重新裁剪局部回贴区域");
       localEdit = await localEditPrepareLimiterRef.current(() => prepareOutfitTaskLocalEdit(task, localEdit, settings.model, task.localEditBatchMode || ""));
@@ -9397,7 +9728,7 @@ function buildTasks(countOverride = plannedGenerationCount) {
       if (!localPasteSizes.matches) {
         addEvent("贴回尺寸异常", `底图 ${localPasteSizes.base || "?"} → 输出 ${localPasteSizes.output || "?"}`);
       }
-      const cachedUrl = URL.createObjectURL(composedBlob);
+      const cachedUrl = createDocumentObjectUrl(composedBlob);
       const composedFile = fileFromBlob(
         composedBlob,
         `${fileBaseName(task.modelItem?.name || `task_${task.order}`)}_局部贴回`,
@@ -9440,7 +9771,7 @@ function buildTasks(countOverride = plannedGenerationCount) {
         outpaintUploadMeta,
         { returnDiagnostics: true }
       );
-      const cachedUrl = URL.createObjectURL(outpaintBlob);
+      const cachedUrl = createDocumentObjectUrl(outpaintBlob);
       const outpaintFile = fileFromBlob(
         outpaintBlob,
         `${fileBaseName(task.modelItem?.name || `task_${task.order}`)}_扩图原图保护`,
@@ -9479,7 +9810,7 @@ function buildTasks(countOverride = plannedGenerationCount) {
       const generatedBlob = await blobFromOutfitImage(payload.image);
       const { blob: cropReturnBlob, diagnostics: cropReturnDiagnostics } = await composeCropReturnBlob(originalFile, generatedBlob, task.cropReturn);
       const dataUrl = await dataUrlFromBlob(cropReturnBlob);
-      const cachedUrl = URL.createObjectURL(cropReturnBlob);
+      const cachedUrl = createDocumentObjectUrl(cropReturnBlob);
       const cropReturnMeta = normalizeCropReturnMeta({
         ...task.cropReturn,
         diagnostics: cropReturnDiagnostics
@@ -9500,6 +9831,28 @@ function buildTasks(countOverride = plannedGenerationCount) {
       displayImage = resultImage;
     }
     setClockNow(finishedAt);
+    // 这一条完成后的完整任务快照：既用于 setState，也用于"组件已被卸载"时的补登记。
+    const finishedTaskPatch = {
+      status: "success",
+      result: displayImage,
+      prompt: payload.prompt,
+      timingMs,
+      error: "",
+      errorDetail: "",
+      runtimeStage: "完成",
+      runtimeDetail: `总耗时 ${formatMs(timingMs)}`,
+      runtimeUpdatedAt: finishedAt,
+      autoSaveFailed: false,
+      finishedAt,
+      cropReturn: normalizeCropReturnMeta(task.cropReturn),
+      aspectRatio: taskAspectRatio
+    };
+    const finishedTaskForSave = {
+      ...task,
+      ...finishedTaskPatch,
+      result: resultImage,
+      cropReturn: normalizeCropReturnMeta(task.cropReturn)
+    };
     setTasks((current) => current.map((item) => {
       if (item.id !== task.id) return item;
       if (item.result?.cachedUrl && item.result.cachedUrl !== displayImage?.cachedUrl) {
@@ -9507,27 +9860,32 @@ function buildTasks(countOverride = plannedGenerationCount) {
       }
       return {
         ...item,
-        status: "success",
-        result: displayImage,
-        prompt: payload.prompt,
-        timingMs,
-        error: "",
-        errorDetail: "",
-        runtimeStage: "完成",
-        runtimeDetail: `总耗时 ${formatMs(timingMs)}`,
-        runtimeUpdatedAt: finishedAt,
-        autoSaveFailed: false,
+        ...finishedTaskPatch,
         qualityCheck: item.qualityCheckEnabled
           ? { ...(item.qualityCheck || {}), status: "checking", summary: "生成完成，AI质检员正在检查" }
-          : null,
-        finishedAt,
-        cropReturn: normalizeCropReturnMeta(task.cropReturn),
-        aspectRatio: taskAspectRatio
+          : null
       };
     }));
-    void autoSaveTask({ ...task, result: resultImage, prompt: payload.prompt, cropReturn: normalizeCropReturnMeta(task.cropReturn), aspectRatio: taskAspectRatio }, resultImage);
+    const autoSavePromise = autoSaveTask(finishedTaskForSave, resultImage);
     if (task.qualityCheckEnabled) {
       void runTaskQualityCheck({ ...task, prompt: payload.prompt, result: resultImage }, modelUploadFile, resultImage, taskAspectRatio, payload.prompt);
+    }
+    // 跨挂载周期账本：先记下这一条已经完成，切走又切回来时能立刻收敛成结果。
+    publishOutfitLiveRun(finishedTaskForSave);
+    // 保存完成后再补发一次：把保存文件名 / 保存路径同步给页面（含重挂载后的页面）。
+    void autoSavePromise.then((saved) => {
+      if (!saved) return;
+      publishOutfitLiveRun({
+        ...finishedTaskForSave,
+        savedFilename: saved.filename || finishedTaskForSave.savedFilename || "",
+        savedPath: saved.path || finishedTaskForSave.savedPath || "",
+        autoSaveFailed: false
+      });
+    });
+    // 用户此刻没有在看这一条（切走了左侧页面，或切到了别的批量分区）：
+    // 上面的 setState 不会生效，这里把结果直接补登记进页面草稿，保证切回来还能看到、能下载。
+    if (!outfitMountedRef.current || !visibleTaskIdsRef.current.has(task.id)) {
+      void persistFinishedTaskWhileDetached(finishedTaskForSave, autoSavePromise);
     }
   }
 
@@ -9592,6 +9950,8 @@ function buildTasks(countOverride = plannedGenerationCount) {
       localEditBatchMode: runMode
     }));
     setTasks((current) => [...current, ...runnableTasks]);
+    // 记进跨挂载周期账本：用户点完生成立刻切走时，重挂载后这一条仍然显示"等待/生成中"。
+    runnableTasks.forEach((task) => publishOutfitLiveRun(task));
     beginGenerationRun();
     addEvent(
       workflowEventTitle,
@@ -9619,19 +9979,29 @@ function buildTasks(countOverride = plannedGenerationCount) {
             sanitizeErrorText(error?.detail || (error instanceof Error ? error.message : String(error)))
           ].filter(Boolean).join("\n");
           // 传 Error 对象（不是只有 message），这样服务端给的 requestId 能显示出来。
-          setTasks((current) => current.map((item) => item.id === task.id ? {
-            ...item,
+          const failedAt = Date.now();
+          const failedPatch = {
             status: "failed",
             error: summarizeGenerationError(error),
             errorDetail,
             runtimeStage: "失败",
             runtimeDetail: stageDetail || "",
-            runtimeUpdatedAt: Date.now(),
+            runtimeUpdatedAt: failedAt,
+            finishedAt: failedAt
+          };
+          setTasks((current) => current.map((item) => item.id === task.id ? {
+            ...item,
+            ...failedPatch,
             qualityCheck: item.qualityCheckEnabled
               ? { status: "skipped", summary: "生成失败，未质检" }
-              : null,
-            finishedAt: Date.now()
+              : null
           } : item));
+          publishOutfitLiveRun({ ...task, ...failedPatch });
+          // 用户此刻没有在看这一条：把失败原因也补登记进页面草稿，
+          // 切回来能看到真实原因而不是"待确认"。
+          if (!outfitMountedRef.current || !visibleTaskIdsRef.current.has(task.id)) {
+            void persistFinishedTaskWhileDetached({ ...task, ...failedPatch }, null);
+          }
         }
       }
     }
@@ -10553,8 +10923,11 @@ function buildTasks(countOverride = plannedGenerationCount) {
                 <select value={settings.model} onChange={(event) => updateSetting("model", event.target.value)}>
                   {models.map((model) => <option key={model.value} value={model.value}>{model.label}</option>)}
                 </select>
-                {/* 线路选择：请求必须带 canonical channelId；旧线路不会出现在这里，服务端也会拒绝。 */}
+                {/* 线路选择：请求必须带 canonical channelId；旧线路不会出现在这里，服务端也会拒绝。
+                    2026-09-26：批量页保持原来的下拉框样式（和旁边模型/比例/尺寸同级），
+                    只让"当前选中的渠道"用快捷生成那套金色 #fbbf24 显示，其余样式不变。 */}
                 <select
+                  className="channelSelect"
                   value={outfitChannels.some((channel) => channel.id === settings.channelId) ? settings.channelId : (outfitChannels[0]?.id || "")}
                   onChange={(event) => updateSetting("channelId", event.target.value)}
                   title="当前模型的可用线路"

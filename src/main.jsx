@@ -50,6 +50,7 @@ import {
 import { DEFAULT_MODELS, imageSourceFromResult } from "./shared/models.js";
 import {
   canonicalModel,
+  channelForModel,
   channelPriceLabel,
   channelsForModel,
   clampPromptForModel,
@@ -77,6 +78,7 @@ import {
 import DebouncedTextarea from "./shared/DebouncedTextarea.jsx";
 import { ErrorBoundary } from "./shared/error-boundary.jsx";
 import { Modal, ModalHeader } from "./shared/ui/Modal.jsx";
+import ChannelPicker from "./shared/ui/ChannelPicker.jsx";
 import { brokenImageReason, isAllowedReferenceImage, resultImageCardState } from "./shared/result-image.js";
 import { classifyGenerationError, formatGenerationError } from "./shared/generation-errors.js";
 import { fileSize, formatMs } from "./lib/format/index.js";
@@ -3113,6 +3115,15 @@ function App() {
         const converged = convergeSettingsForModel(current, routingCatalog);
         return { ...converged, baseUrl: data.defaultBaseUrl || defaultState.baseUrl };
       });
+      // 参考生图 / 一键详情·主图 的渠道状态各自独立保存，目录回来后同样各收敛一次：
+      // 目录里没有当前渠道（或当前渠道不支持这个模型）时落到该模型的第一条合法渠道。
+      const convergePageChannel = (current) => {
+        if (!isRoutingCatalogReady(routingCatalog)) return current;
+        const nextChannelId = channelForModel(current.model, current.channelId, routingCatalog)?.id || "";
+        return nextChannelId === current.channelId ? current : { ...current, channelId: nextChannelId };
+      };
+      setDetailSettings(convergePageChannel);
+      setReferenceSettings(convergePageChannel);
     }).catch(() => {});
 
     refreshSaveDirectory();
@@ -3329,6 +3340,13 @@ function App() {
       if (key === "model") {
         const nextModel = models.find((item) => item.value === value) || models[0];
         if (!nextModel.ratios.includes(next.ratio)) next.ratio = nextModel.ratios[0];
+        // 切换模型后按现有能力目录重新校验渠道：当前渠道不支持新模型时，
+        // 沿用现有默认渠道规则（channelForModel = 该模型目录里的第一条合法渠道）。
+        next.channelId = channelForModel(next.model, next.channelId, config.routing || config)?.id || "";
+      }
+      if (key === "channelId") {
+        const channels = channelsForModel(next.model, config.routing || config);
+        next.channelId = channels.some((item) => item.id === value) ? value : (channels[0]?.id || "");
       }
       if (key === "count") next.count = clampDetailCount(value);
       if (key === "modelUsage") next.modelUsage = clampDetailModelUsage(value);
@@ -3343,6 +3361,12 @@ function App() {
       if (key === "model") {
         const nextModel = models.find((item) => item.value === value) || models[0];
         if (!nextModel.ratios.includes(next.aspectRatio)) next.aspectRatio = nextModel.ratios[0];
+        // 同 updateDetailSetting：模型换了就按新模型的合法渠道重新落一次。
+        next.channelId = channelForModel(next.model, next.channelId, config.routing || config)?.id || "";
+      }
+      if (key === "channelId") {
+        const channels = channelsForModel(next.model, config.routing || config);
+        next.channelId = channels.some((item) => item.id === value) ? value : (channels[0]?.id || "");
       }
       if (key === "n") next.n = Math.min(clampCount(value), modelCapabilities(next.model, config).maxInputImages);
       if (key === "strength") next.strength = clampReferenceStrength(value);
@@ -6715,7 +6739,19 @@ function App() {
                 <div className="detailDivider" />
 
                 <section className="detailFormSection">
-                  <h3>基础参数</h3>
+                  {/* 2026-09-26：在「基础参数」标题行右侧加一个紧凑圆形渠道入口。
+                      入口绝对定位（见 styles.css 的 .detailFormHeader / .channelPicker），
+                      所以不新增整行控件、不改参数区高度；渠道列表走共享 ChannelPicker。 */}
+                  <div className="detailFormHeader">
+                    <h3>基础参数</h3>
+                    <ChannelPicker
+                      model={detailSettings.model}
+                      modelLabel={detailModel?.label || detailSettings.model}
+                      channelId={detailSettings.channelId}
+                      routing={config.routing || config}
+                      onChange={(channelId) => updateDetailSetting("channelId", channelId)}
+                    />
+                  </div>
                   <div className="detailParamGrid">
                     <label>
                       <span>工作流</span>
@@ -7538,7 +7574,19 @@ function App() {
                 <div className="detailDivider" />
 
                 <section className="detailFormSection">
-                  <h3>参考控制</h3>
+                  {/* 2026-09-26：参考生图的渠道入口与「参考控制」参数区同一行，
+                      与快捷生成/一键详情共用 src/shared/ui/ChannelPicker.jsx；
+                      渠道状态保存在本页自己的 referenceSettings.channelId 里，互不污染。 */}
+                  <div className="detailFormHeader">
+                    <h3>参考控制</h3>
+                    <ChannelPicker
+                      model={referenceSettings.model}
+                      modelLabel={referenceModel?.label || referenceSettings.model}
+                      channelId={referenceSettings.channelId}
+                      routing={config.routing || config}
+                      onChange={(channelId) => updateReferenceSetting("channelId", channelId)}
+                    />
+                  </div>
                   <div className="detailParamGrid">
                     <label>
                       <span>图片模型</span>

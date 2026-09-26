@@ -3164,6 +3164,20 @@
   border-color: color-mix(in srgb, var(--text-soft) 42%, transparent);
 }
 
+/* 线路下拉框：保持原来的方框样式（和旁边的模型/比例/尺寸同级），
+   只把"当前选中的渠道"用快捷生成那套金色标出来（#fbbf24 = 快捷生成圆钮 / 菜单选中项的颜色）。
+   下拉列表里的选项沿用 .outfitWorkflowEmbedded select option 的深色底 + 常规文字色，
+   不把白色文字带到系统弹层里，避免白底白字。 */
+.outfitWorkflowEmbedded .rightTools select.channelSelect {
+  color: #fbbf24;
+  font-weight: 650;
+}
+
+.outfitWorkflowEmbedded .rightTools select.channelSelect option {
+  color: var(--text);
+  background: var(--option-bg);
+}
+
 .outfitWorkflowEmbedded .garmentPartPresetGroup,
 .outfitWorkflowEmbedded .garmentPartPicker {
   display: inline-flex;

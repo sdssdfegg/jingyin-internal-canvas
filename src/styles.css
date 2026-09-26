@@ -1702,6 +1702,105 @@ textarea:focus {
   text-transform: uppercase;
 }
 
+/* 参数区标题行：只在原来那一行 h3 的右侧多挂一个圆形渠道入口。
+   关键约束（2026-09-26 需求）：不能改变现有参数区高度、浮层不能推动下面的参数。
+   做法是把整个渠道入口（圆钮 + 渠道名 + 浮层）都绝对定位在同一条标题行里：
+   唯一参与布局的还是那个 h3，所以行高、区块高度、滚动位置全部不变。 */
+.detailFormHeader {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.detailFormHeader h3 {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.channelPicker {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 6px;
+  transform: translateY(-50%);
+}
+
+/* 圆钮：颜色 / 边框 / 背景与快捷生成右上角「线路价格」`.quickToolButton.channelPriceButton` 完全一致
+   （金色 #fbbf24 = 当前渠道；hover 转白；展开时金色描边 + 金色淡底）。
+   尺寸 22px：正好收在参数区标题行里，不改变参数区高度。
+   批量页的渠道入口保持原来的下拉框样式，用的是 outfit-workflow.css 里的 `.channelSelect`，不走这里。 */
+.channelPickerTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0;
+  border-radius: 50%;
+  color: #fbbf24;
+  font-weight: 800;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--soft-border);
+  cursor: pointer;
+}
+
+.channelPickerTrigger:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, #fbbf24 55%, transparent);
+}
+
+.channelPickerTrigger.active {
+  border-color: color-mix(in srgb, #fbbf24 65%, transparent);
+  background: color-mix(in srgb, #fbbf24 16%, transparent);
+}
+
+.channelPickerTrigger .quickToolGlyph {
+  color: inherit;
+}
+
+.channelPickerName {
+  max-width: 104px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* 浮层：复用快捷生成 .quickChannelMenu 的观感，只把锚点改到圆钮本身。 */
+.channelPicker .quickChannelMenu {
+  top: 26px;
+  right: 0;
+}
+
+/* ⚠️ 参数区有一条 `.detailFormSection span { color: var(--muted); font-size: 12px }`
+   （见上面"通用参数区"那段），它会把渠道入口里的所有 <span>（¥ 字形、渠道名、菜单里的渠道名）
+   一起压成灰色 + 12px。这里用更高特异性交还给组件自己的规则，
+   否则圆钮和菜单就变成"全灰"，而不是快捷生成那套"选中金色 / 未选中白色"。 */
+.detailFormSection .channelPicker span {
+  color: inherit;
+}
+
+.detailFormSection .channelPicker .quickToolGlyph {
+  color: inherit;
+  font-size: 13px;
+}
+
+.detailFormSection .channelPicker .channelPickerName {
+  color: var(--text);
+  font-size: 11px;
+}
+
 .referencePromptHeader {
   display: flex;
   align-items: center;
