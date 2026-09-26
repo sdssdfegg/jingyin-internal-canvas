@@ -3461,6 +3461,18 @@ textarea:focus {
   overflow: auto;
 }
 
+/* 局部回贴：已保存选框与当前底图尺寸不一致时的提醒（坐标会错位，需重新框选）。 */
+.quickLocalEditWarning {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 176, 76, 0.55);
+  border-radius: 8px;
+  background: rgba(255, 176, 76, 0.12);
+  color: #ffd9a0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .quickLocalEditStage {
   display: grid;
   place-items: center;

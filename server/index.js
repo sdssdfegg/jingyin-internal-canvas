@@ -452,6 +452,7 @@ function taskLogStageTitle(stage) {
     "client-generation-submit": "前端点击生成，准备提交",
     "client-generation-response": "前端收到本地接口响应",
     "client-generation-error": "前端生成请求失败",
+    "client-generation-local-paste-composed": "局部回贴贴回合成完成",
     "client-result-display-ready": "前端结果图已完成显示准备",
     "local-request-received": "本地服务收到生成请求",
     "local-request-aborted": "本地请求被中断",
@@ -542,6 +543,19 @@ function taskLogLines(entry) {
     if (detail.workflowMode) lines.push(`前端工作流：${detail.workflowMode}`);
     if (detail.sourceType) lines.push(`前端图片来源：${detail.sourceType}`);
     if (detail.message) lines.push(`前端信息：${compactLogMessage(detail.message, 260)}`);
+    // 局部回贴尺寸对账单：底图（= 我给的图）/ 选框 / 贴回输出，
+    // 用于核对"给多少尺寸 → 返回多少尺寸"，以及排查贴回偏移。
+    const localPaste = detail.localPaste && typeof detail.localPaste === "object" ? detail.localPaste : null;
+    if (localPaste) {
+      if (detail.baseName) lines.push(`贴回底图：${compactLogMessage(detail.baseName, 120)}`);
+      if (localPaste.base) lines.push(`贴回底图尺寸：${localPaste.base}`);
+      if (localPaste.uploadCopy) lines.push(`上传副本尺寸：${localPaste.uploadCopy}`);
+      if (localPaste.rect) lines.push(`选框尺寸：${localPaste.rect}${localPaste.rectAt ? ` @ (${localPaste.rectAt})` : ""}`);
+      if (localPaste.output) lines.push(`贴回输出尺寸：${localPaste.output}`);
+      if (localPaste.matches !== undefined) {
+        lines.push(`尺寸一致性：${localPaste.matches ? "输出与底图同尺寸" : "输出与底图不一致（异常，请反馈）"}`);
+      }
+    }
   }
 
   const error = entry.error || entry.upstreamError || entry.message;

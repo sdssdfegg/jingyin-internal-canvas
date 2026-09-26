@@ -43,6 +43,44 @@ export function resolveLocalEditBaseFile(item) {
   return item.originalFile || item.file || null;
 }
 
+/** 像素尺寸文案：局部回贴的"给多少尺寸 → 返回多少尺寸"口径统一用它。 */
+export function formatPixelSize(width, height) {
+  const w = Math.max(0, Math.round(Number(width) || 0));
+  const h = Math.max(0, Math.round(Number(height) || 0));
+  return w > 0 && h > 0 ? `${w}×${h}` : "";
+}
+
+/**
+ * 局部回贴的**尺寸对账单**（写进任务日志、显示在弹窗里）。
+ *
+ * 契约（用户口径："我给的图多少尺寸，返回的就是多少尺寸"）：
+ *   - `base`     = 我给的图（= `resolveLocalEditBaseFile` 那张）的尺寸；
+ *   - `rect`     = 选框在 `base` 坐标系里的像素范围（送模型的局部图就是它裁出来的）；
+ *   - `output`   = 贴回输出画布尺寸，**必须等于 `base`**；
+ *   - `uploadCopy` = 应用为"送中转渠道"另存的副本尺寸（可能比 base 小，不参与贴回）。
+ *
+ * 把这三四个数摆在一起，"偏移/尺寸不对"就不再是只能靠肉眼判断的事：
+ * `matches=false` 明确表示输出尺寸和底图不一致（异常）。
+ */
+export function localPasteSizeReport(input = {}) {
+  const base = input.base || {};
+  const rect = input.rect || {};
+  const output = input.output || base;
+  const uploadCopy = input.uploadCopy || null;
+  const baseText = formatPixelSize(base.width, base.height);
+  const outputText = formatPixelSize(output.width, output.height);
+  return {
+    base: baseText,
+    uploadCopy: uploadCopy ? formatPixelSize(uploadCopy.width, uploadCopy.height) : "",
+    rect: formatPixelSize(rect.width, rect.height),
+    rectAt: Number.isFinite(Number(rect.x)) && Number.isFinite(Number(rect.y))
+      ? `${Math.round(Number(rect.x))},${Math.round(Number(rect.y))}`
+      : "",
+    output: outputText,
+    matches: Boolean(baseText) && baseText === outputText
+  };
+}
+
 /** 把选框夹进图片范围内，宽高保持整数像素，**不做任何比例或最小尺寸改写**。 */
 export function constrainCropRect(rect, imageWidth, imageHeight) {
   const width = Math.max(1, Math.min(Math.round(rect?.width || 1), imageWidth));

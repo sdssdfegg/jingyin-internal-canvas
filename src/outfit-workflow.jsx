@@ -67,6 +67,8 @@ import {
   constrainCropRect as sharedConstrainCropRect,
   cropRectToBlob,
   fitRectToRatioLocked,
+  formatPixelSize,
+  localPasteSizeReport,
   resizeRectFromCenterLocked,
   resizeRectFromCornerLocked,
   resolveLocalEditBaseFile,
@@ -4256,6 +4258,18 @@ function UploadZone({
   const [draggingImageId, setDraggingImageId] = useState("");
   const [dropTarget, setDropTarget] = useState(null);
   const [replaceTargetId, setReplaceTargetId] = useState("");
+  // 缩略图 meta 要显示像素尺寸：直接读已渲染 <img> 的 naturalWidth/Height（零额外解码）。
+  const thumbSizeRef = useRef(new Map());
+  const [, bumpThumbSizeRevision] = useState(0);
+  function rememberThumbSize(itemId, image) {
+    const width = image?.naturalWidth || 0;
+    const height = image?.naturalHeight || 0;
+    if (!itemId || !width || !height) return;
+    const previous = thumbSizeRef.current.get(itemId);
+    if (previous && previous.width === width && previous.height === height) return;
+    thumbSizeRef.current.set(itemId, { width, height });
+    bumpThumbSizeRevision((value) => value + 1);
+  }
   const columnCount = primary ? 10 : 2;
   const mixedMode = bulkMode === "mixed";
   const displayTitle = titleText || title;
@@ -4482,14 +4496,21 @@ function UploadZone({
               onDrop={(event) => void handleReplaceDrop(event, item)}
             >
               <button className={`thumbImage mode-${item.mode || "pad"}`} type="button" onClick={() => onPreview?.({ ...item, previewUrl: thumbPreviewUrl })}>
-                <img src={thumbPreviewUrl} alt="" draggable={false} />
+                <img src={thumbPreviewUrl} alt="" draggable={false} onLoad={(event) => rememberThumbSize(item.id, event.currentTarget)} />
                 <i>{index + 1}</i>
                 <em>{item.mode === "crop" ? "裁" : item.mode === "soft" ? "柔" : item.mode === "original" ? "原" : "白"}</em>
                 {items.length > 1 && <span className="dragHandle" title="拖拽调整顺序"><Move size={13} /></span>}
               </button>
               <div className="thumbMeta">
                 <strong title={item.name}>{item.name}</strong>
-                <span>{item.mode === "crop" ? "手动裁剪" : item.mode === "soft" ? "柔和补边" : item.mode === "original" ? "原图" : "白底补边"} · {fileSize(item.file.size)}</span>
+                <span>
+                  {item.mode === "crop" ? "手动裁剪" : item.mode === "soft" ? "柔和补边" : item.mode === "original" ? "原图" : "白底补边"} · {fileSize(item.file.size)}
+                  {item.localEdit?.cropRect
+                    ? ` · 局部 ${formatPixelSize(item.localEdit.cropRect.width, item.localEdit.cropRect.height)} · 底图 ${formatPixelSize(item.localEdit.sourceWidth, item.localEdit.sourceHeight)}`
+                    : thumbSizeRef.current.get(item.id)
+                      ? ` · 上传 ${formatPixelSize(thumbSizeRef.current.get(item.id).width, thumbSizeRef.current.get(item.id).height)}`
+                      : ""}
+                </span>
               </div>
               <div className="thumbActions">
                 <button type="button" onClick={() => onToggle(item.id)} title="参与本次批量">
@@ -5244,6 +5265,18 @@ function OutfitLocalEditModal({ item, ratio, onRatioChange, onClose, onApply, on
   };
   const applyDisabled = working || !cropRect || (isMaskMode && !maskPainted);
 
+  // 尺寸口径：底图 = 用户放进图1的那张文件（= 贴回底图），输出与它同尺寸。
+  // 图片还没 onLoad 时先用上次选框记录的 sourceWidth/Height，避免标题一闪是空的。
+  const baseSizeText = formatPixelSize(imageSize.width, imageSize.height)
+    || formatPixelSize(savedEdit?.sourceWidth, savedEdit?.sourceHeight);
+  // 选框是在另一张不同尺寸的图上框的 → 坐标会错位，必须提醒重新框选（"不能出现偏移"）。
+  const staleRect = Boolean(
+    savedEdit?.sourceWidth
+    && imageSize.width
+    && (Math.round(savedEdit.sourceWidth) !== Math.round(imageSize.width)
+      || Math.round(savedEdit.sourceHeight || 0) !== Math.round(imageSize.height))
+  );
+
   return (
     <Modal
       layerClassName="modalLayer previewLayer"
@@ -5252,10 +5285,16 @@ function OutfitLocalEditModal({ item, ratio, onRatioChange, onClose, onApply, on
     >
       <ModalHeader
         title="局部回贴"
-        subtitle={<>{originalFile?.name || "上传图片"} · 生成后贴回原图同一坐标 · {activeRatio}</>}
+        subtitle={<>{originalFile?.name || "上传图片"} · 底图 {baseSizeText || "读取中…"} · 生成后贴回同一坐标，输出同尺寸 · {activeRatio}</>}
         onClose={onClose}
         closeLabel="关闭"
       />
+      {staleRect && (
+        <p className="quickLocalEditWarning" role="alert">
+          已保存的选框是在 {formatPixelSize(savedEdit?.sourceWidth, savedEdit?.sourceHeight)} 的图上框的，
+          当前底图是 {baseSizeText}：坐标对不上，请重新框选后再应用（否则会贴偏移）。
+        </p>
+      )}
         <div className="quickLocalEditStage">
           <div className="quickLocalEditImageWrap">
             {imageUrl && (
@@ -9344,6 +9383,29 @@ function buildTasks(countOverride = plannedGenerationCount) {
         returnDiagnostics: true
       });
       localEditDiagnostics.taskBinding = localEditTaskBinding;
+      // 尺寸对账单：底图（我给的图）/ 选框 / 上传副本 / 贴回输出。
+      // 用户口径是"我给的图多少尺寸，返回的就是多少尺寸"，这里把四个数写进任务日志，
+      // 以后出现"尺寸不对/偏移"的争议可以直接拿日志核对，不用靠肉眼判断。
+      const localPasteSizes = localPasteSizeReport({
+        base: { width: localEditDiagnostics.sourceWidth, height: localEditDiagnostics.sourceHeight },
+        rect: localEditDiagnostics.pasteRect,
+        output: { width: localEditDiagnostics.sourceWidth, height: localEditDiagnostics.sourceHeight }
+      });
+      emitClientDiagnosticEvent({
+        requestId: task.id,
+        stage: "client-generation-local-paste-composed",
+        endpoint: "/api/generate-outfit",
+        method: "COMPOSE",
+        ok: true,
+        detail: {
+          taskId: task.id,
+          baseName: task.modelItem?.name || "",
+          localPaste: localPasteSizes
+        }
+      });
+      if (!localPasteSizes.matches) {
+        addEvent("贴回尺寸异常", `底图 ${localPasteSizes.base || "?"} → 输出 ${localPasteSizes.output || "?"}`);
+      }
       const cachedUrl = URL.createObjectURL(composedBlob);
       const composedFile = fileFromBlob(
         composedBlob,

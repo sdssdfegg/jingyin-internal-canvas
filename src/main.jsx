@@ -67,6 +67,7 @@ import {
   constrainCropRect as sharedConstrainCropRect,
   cropRectToBlob,
   fitRectToRatioLocked,
+  formatPixelSize,
   resizeRectFromCenterLocked,
   resizeRectFromCornerLocked,
   resolveLocalEditBaseFile,
@@ -2562,6 +2563,17 @@ function QuickLocalEditModal({ item, ratio, mode = "local", onRatioChange, onClo
     height: `${brushSize}px`
   };
   const applyDisabled = working || !cropRect || (isMaskMode && !maskPainted);
+  // 尺寸口径（与批量侧同一套）：底图 = 我放进图1的那张文件；局部回贴输出与它同尺寸。
+  const baseSizeText = formatPixelSize(imageSize.width, imageSize.height)
+    || formatPixelSize(savedEdit?.sourceWidth, savedEdit?.sourceHeight);
+  // 选框是在另一张不同尺寸的图上框的 → 坐标会错位，必须提醒重新框选。
+  const staleRect = Boolean(
+    isLocalMode
+    && savedEdit?.sourceWidth
+    && imageSize.width
+    && (Math.round(savedEdit.sourceWidth) !== Math.round(imageSize.width)
+      || Math.round(savedEdit.sourceHeight || 0) !== Math.round(imageSize.height))
+  );
 
   return (
     <Modal
@@ -2571,10 +2583,16 @@ function QuickLocalEditModal({ item, ratio, mode = "local", onRatioChange, onClo
     >
       <ModalHeader
         title={modalTitle}
-        subtitle={<>{originalFile?.name || "上传图片"} · {modalDescription} · {activeRatio}</>}
+        subtitle={<>{originalFile?.name || "上传图片"} · {isLocalMode && baseSizeText ? `底图 ${baseSizeText} · ` : ""}{modalDescription} · {activeRatio}</>}
         onClose={onClose}
         closeLabel="关闭"
       />
+      {staleRect && (
+        <p className="quickLocalEditWarning" role="alert">
+          已保存的选框是在 {formatPixelSize(savedEdit?.sourceWidth, savedEdit?.sourceHeight)} 的图上框的，
+          当前底图是 {baseSizeText}：坐标对不上，请重新框选后再应用（否则会贴偏移）。
+        </p>
+      )}
         <div className="quickLocalEditStage">
           <div className="quickLocalEditImageWrap">
             {imageUrl && (

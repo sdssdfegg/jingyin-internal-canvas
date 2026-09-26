@@ -22,11 +22,15 @@
 // 用法：node scripts/verify/local-edit-base-file-check.mjs
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { installExitCleanup, stopChild } from "./lib/sandbox.mjs";
-import { resolveLocalEditBaseFile } from "../../src/shared/local-edit-geometry.js";
+import {
+  formatPixelSize,
+  localPasteSizeReport,
+  resolveLocalEditBaseFile
+} from "../../src/shared/local-edit-geometry.js";
 
 const ROOT = process.cwd();
 const NODE = path.join(ROOT, "runtime", "node", "node.exe");
@@ -34,6 +38,9 @@ const APP_PORT = 8812;
 const GEOMETRY_FILE = path.join(ROOT, "src", "shared", "local-edit-geometry.js");
 const OUTFIT_FILE = path.join(ROOT, "src", "outfit-workflow.jsx");
 const MAIN_FILE = path.join(ROOT, "src", "main.jsx");
+const SERVER_FILE = path.join(ROOT, "server", "index.js");
+const STYLES_FILE = path.join(ROOT, "src", "styles.css");
+const EMBEDDED_STYLES_FILE = path.join(ROOT, "src", "outfit-workflow.css");
 const HISTORY_FILE = path.join(ROOT, "data", "history.json");
 const CLI = path.join(process.env.LOCALAPPDATA || "", "Tabbit", "LocalAgent", "bin", "tabbit-cli.exe");
 
@@ -55,6 +62,38 @@ function check(name, pass, detail = "") {
   check("两份都没有时返回 null（不抛异常）",
     resolveLocalEditBaseFile({}) === null && resolveLocalEditBaseFile(null) === null && resolveLocalEditBaseFile(undefined) === null,
     "null safe");
+}
+
+// ---------------------------------------------------------------- 尺寸对账单（用户口径：给多少尺寸 → 返回多少尺寸）
+{
+  check("formatPixelSize 输出 W×H，缺值返回空串",
+    formatPixelSize(2334, 3500) === "2334×3500" && formatPixelSize(0, 100) === "" && formatPixelSize(undefined, undefined) === "",
+    `${formatPixelSize(2334, 3500)} / ${formatPixelSize(0, 100) || "(空)"}`);
+  const ok = localPasteSizeReport({
+    base: { width: 2334, height: 3500 },
+    rect: { x: 295, y: 1317, width: 1637, height: 2183 },
+    output: { width: 2334, height: 3500 }
+  });
+  check("对账单：底图/选框/输出尺寸齐全且判定同尺寸",
+    ok.base === "2334×3500" && ok.rect === "1637×2183" && ok.rectAt === "295,1317" && ok.output === "2334×3500" && ok.matches === true,
+    JSON.stringify(ok));
+  const bad = localPasteSizeReport({
+    base: { width: 2334, height: 3500 },
+    rect: { x: 295, y: 1317, width: 1637, height: 2183 },
+    output: { width: 2049, height: 3072 }
+  });
+  check("对账单：输出与底图不一致时必须判为不通过（事故签名）",
+    bad.matches === false && bad.base === "2334×3500" && bad.output === "2049×3072",
+    JSON.stringify(bad));
+  const withCopy = localPasteSizeReport({
+    base: { width: 5350, height: 8021 },
+    uploadCopy: { width: 2049, height: 3072 },
+    rect: { x: 100, y: 200, width: 1200, height: 1600 },
+    output: { width: 5350, height: 8021 }
+  });
+  check("对账单：能同时给出上传副本尺寸（解释 3072 与 8021 的差别）",
+    withCopy.uploadCopy === "2049×3072" && withCopy.base === "5350×8021" && withCopy.matches === true,
+    JSON.stringify(withCopy));
 }
 
 // ---------------------------------------------------------------- 源码级接线
@@ -103,6 +142,46 @@ check("上传副本长边上限仍是 3072（探针反例尺寸与线上压缩�
   /CHANNEL_UPLOAD_MAX_SIDE = 3072;/.test(outfitSrc) && /CHANNEL_UPLOAD_MAX_SIDE = 3072;/.test(mainSrc),
   "3072");
 
+// 尺寸可见性接线：用户口径是"我给的图多少尺寸，返回的就是多少尺寸"，
+// 所以"底图尺寸 / 输出尺寸"必须在界面上和任务日志里都能看到，不用靠肉眼猜。
+const serverSrc = readFileSync(SERVER_FILE, "utf8");
+const stylesSrc = readFileSync(STYLES_FILE, "utf8");
+const embeddedStylesSrc = readFileSync(EMBEDDED_STYLES_FILE, "utf8");
+
+check("批量：贴回后发出尺寸对账单诊断事件（client-generation-local-paste-composed）",
+  /stage: "client-generation-local-paste-composed"/.test(outfitSrc)
+    && /localPaste: localPasteSizes/.test(outfitSrc)
+    && /const localPasteSizes = localPasteSizeReport\(\{/.test(outfitSrc),
+  "runSingleTask 贴回");
+check("批量：贴回尺寸异常时会明确报事件（而不是静默）",
+  /if \(!localPasteSizes\.matches\) \{[\s\S]{0,200}?addEvent\("贴回尺寸异常"/.test(outfitSrc),
+  "matches=false 分支");
+check("批量：局部回贴弹窗标题显示底图尺寸与「输出同尺寸」",
+  /底图 \{baseSizeText \|\| "读取中…"\} · 生成后贴回同一坐标，输出同尺寸/.test(outfitSrc),
+  "OutfitLocalEditModal");
+check("批量：选框与当前底图尺寸不一致时给出偏移警告",
+  /const staleRect = Boolean\(/.test(outfitSrc) && /className="quickLocalEditWarning" role="alert"/.test(outfitSrc),
+  "staleRect");
+check("批量：图1缩略图同时显示局部选框尺寸与局部回贴底图尺寸",
+  /thumbSizeRef\.current\.get\(item\.id\)/.test(outfitSrc)
+    && /局部 \$\{formatPixelSize\(item\.localEdit\.cropRect\.width, item\.localEdit\.cropRect\.height\)\} · 底图 \$\{formatPixelSize\(item\.localEdit\.sourceWidth, item\.localEdit\.sourceHeight\)\}/.test(outfitSrc)
+    && /上传 \$\{formatPixelSize\(thumbSizeRef\.current\.get\(item\.id\)\.width/.test(outfitSrc),
+  "UploadZone thumbMeta");
+check("快捷：局部回贴弹窗同样显示底图尺寸与偏移警告",
+  /const baseSizeText = formatPixelSize\(imageSize\.width, imageSize\.height\)/.test(mainSrc)
+    && /className="quickLocalEditWarning" role="alert"/.test(mainSrc)
+    && /const staleRect = Boolean\(/.test(mainSrc),
+  "QuickLocalEditModal");
+check("服务端：把该事件写进任务日志（标题 + 底图/输出尺寸 + 一致性）",
+  /"client-generation-local-paste-composed": "局部回贴贴回合成完成"/.test(serverSrc)
+    && /贴回底图尺寸：\$\{localPaste\.base\}/.test(serverSrc)
+    && /贴回输出尺寸：\$\{localPaste\.output\}/.test(serverSrc)
+    && /尺寸一致性：\$\{localPaste\.matches \? "输出与底图同尺寸" : "输出与底图不一致（异常，请反馈）"\}/.test(serverSrc),
+  "server/index.js");
+check("偏移警告样式在两个主题里都有定义",
+  /\.quickLocalEditWarning \{/.test(stylesSrc) && /\.outfitWorkflowEmbedded \.quickLocalEditWarning \{/.test(embeddedStylesSrc),
+  "styles.css + outfit-workflow.css");
+
 // ---------------------------------------------------------------- 浏览器
 async function waitForHealth(port, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
@@ -121,6 +200,62 @@ const hashOf = (file) => {
   catch { return "(读不到)"; }
 };
 
+/**
+ * 端到端验证"贴回尺寸会写进任务日志"：
+ * 往自建实例发一条 `client-generation-local-paste-composed`，再读回它的任务日志文本。
+ * 用的是写入当天 logs/tasks/<date>/ 的临时文件，验证完删掉（不留测试垃圾）。
+ */
+async function verifyTaskLogWiring() {
+  const requestId = `task_1_verify-localpaste-${process.pid}`;
+  const folder = new Date();
+  const dateKey = `${folder.getFullYear()}-${String(folder.getMonth() + 1).padStart(2, "0")}-${String(folder.getDate()).padStart(2, "0")}`;
+  const logFile = path.join(ROOT, "logs", "tasks", dateKey, `${requestId}.txt`);
+  try {
+    const response = await fetch(`http://127.0.0.1:${APP_PORT}/api/client-diagnostic-event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId,
+        stage: "client-generation-local-paste-composed",
+        endpoint: "/api/generate-outfit",
+        method: "COMPOSE",
+        ok: true,
+        detail: {
+          taskId: requestId,
+          baseName: "JY_4.jpg",
+          localPaste: {
+            base: "5350×8021",
+            rect: "1637×2183",
+            rectAt: "295,1317",
+            output: "5350×8021",
+            matches: true
+          }
+        }
+      })
+    });
+    if (!response.ok) throw new Error(`诊断事件写入失败 HTTP ${response.status}`);
+    let text = "";
+    for (let attempt = 0; attempt < 20 && !text; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      text = existsSync(logFile) ? readFileSync(logFile, "utf8") : "";
+    }
+    check("端到端：贴回尺寸诊断会写进任务日志（标题 + 四个尺寸 + 一致性）",
+      /局部回贴贴回合成完成/.test(text)
+        && /贴回底图尺寸：5350×8021/.test(text)
+        && /选框尺寸：1637×2183 @ \(295,1317\)/.test(text)
+        && /贴回输出尺寸：5350×8021/.test(text)
+        && /尺寸一致性：输出与底图同尺寸/.test(text),
+      text ? "logs/tasks 临时日志已核对" : "任务日志未生成");
+  } catch (error) {
+    check("端到端：贴回尺寸诊断会写进任务日志（标题 + 四个尺寸 + 一致性）", false, error instanceof Error ? error.message : String(error));
+  } finally {
+    // 清理要用显式 unlinkSync：这台机器上 fs.rmSync 对工作区路径是静默空操作
+    // （见 scripts/verify/lib/sandbox.mjs 的说明）。
+    try { if (existsSync(logFile)) unlinkSync(logFile); } catch { /* 清理失败不影响结论 */ }
+    check("端到端：临时任务日志已清理（不留测试垃圾）", !existsSync(logFile), path.relative(ROOT, logFile));
+  }
+}
+
 let child = null;
 let facts = null;
 let browserReason = "";
@@ -133,6 +268,10 @@ try {
   });
   installExitCleanup({ getChild: () => child });
   if (!(await waitForHealth(APP_PORT))) throw new Error("V11 测试实例未起来");
+
+  // 端到端：真的发一条贴回尺寸诊断给服务端，确认它被写进任务日志
+  // （界面上看得到尺寸，日志里也要留痕，才能复核"给多少→返回多少"）。
+  await verifyTaskLogWiring();
 
   if (!existsSync(CLI)) {
     browserReason = "tabbit-cli 不存在，跳过浏览器部分";

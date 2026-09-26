@@ -1610,6 +1610,18 @@
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
 }
 
+/* 局部回贴：选框与当前底图尺寸不一致时的提醒（批量内嵌主题）。 */
+.outfitWorkflowEmbedded .quickLocalEditWarning {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 176, 76, 0.5);
+  border-radius: 8px;
+  background: rgba(255, 176, 76, 0.12);
+  color: #ffd7a0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .outfitWorkflowEmbedded .quickLocalEditModal header {
   display: flex;
   align-items: center;
