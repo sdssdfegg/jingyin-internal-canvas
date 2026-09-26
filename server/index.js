@@ -2041,6 +2041,32 @@ function isImageRouteNotFoundError(status, message) {
   return /openai_error|bad_response_status_code|not[_\s-]*found|route|endpoint|model|unsupported|模型.*不可用|模型.*不存在|无可用渠道/i.test(String(message || ""));
 }
 
+/**
+ * 2026-09-26：中转站按请求体里的 channelId 做手动选线时，如果这条线路在中转站适配器里
+ * **根本没有登记**（例如客户端目录刚加了新线路、中转站还没加），中转站会返回 HTTP 400 +
+ * `manual_channel_not_found`。
+ *
+ * 这类失败不是"等待超时"，也不是网络问题：换请求变体、换上游地址、重试都不会成功，
+ * 唯一解是中转站把这条线路补上。所以必须单独识别，原样告诉用户"线路没接通"，
+ * 不能被 shouldTryNextChannel 的 400 分支吞掉，最后包装成 504「生成超时，请重新生成。」
+ * （真实事故：2026-09-26 15:58:56 批量换装选 banana-2 的 Origin 线路，上游 2.36 秒就返回
+ *   `manual_channel_not_found`，界面却显示"生成超时"，用户会一直白等/重试。）
+ */
+function isImageManualChannelNotFoundError(message) {
+  return /manual[_\s-]*channel[_\s-]*(not[_\s-]*found|missing|unknown|invalid)|channel[_\s-]*not[_\s-]*found|线路[^，。；]{0,16}(不存在|未开通|未接入|未配置|不可用)/i.test(String(message || ""));
+}
+
+/**
+ * 2026-09-26：有些线路在中转站里声明了「只允许手动选线」（strictManualDispatch）。
+ * 客户端带了这条线路的 channelId 但 dispatchMode 不是 manual 时，中转站会直接返回
+ * 400 `manual_dispatch_required`——因为不拒绝的话适配器会**把这条线路从自动候选里剔除、
+ * 静默改走同模型的其它线路**，用户以为选的是这条线路，实际扣的是别的线路的钱。
+ * 这种失败换线路变体/换上游地址都不会成功，重试也没意义，所以单独识别、直接判死。
+ */
+function isImageManualDispatchRequiredError(message) {
+  return /manual[_\s-]*dispatch[_\s-]*(required|only)|requires?[_\s-]*manual[_\s-]*dispatch|只支持手动选线|只允许手动选线/i.test(String(message || ""));
+}
+
 function imageWorkflowPublicLabel(mode) {
   const key = String(mode || "").trim();
   if (key === "random-background") return "随机背景";
@@ -2101,6 +2127,10 @@ function isImagePermissionError(status, message) {
 
 function shouldTryNextChannel(status, message) {
   if (isImageAuthError(status, message) || isImageQuotaError(status, message) || isImageTooLargeError(message) || isImagePermissionError(status, message)) return false;
+  // 线路在中转站没登记：换上游地址/换变体都没有意义，直接判死，不做任何隐藏重试。
+  if (isImageManualChannelNotFoundError(message)) return false;
+  // 线路只允许手动选线：换变体也不会变成手动，直接判死。
+  if (isImageManualDispatchRequiredError(message)) return false;
   if ([429, 500, 502, 503, 504].includes(status)) return true;
   if ([400, 404, 422].includes(status)) {
     return /model|unsupported|unknown|image_size|aspect_ratio|openai_error|upstream|not[_\s-]*found|模型.*不可用|模型.*不存在/i.test(String(message || ""));
@@ -2118,6 +2148,10 @@ function publicImageStatus(status, message) {
   if (isImageQuotaError(status, message)) return 402;
   if (isImageTooLargeError(message)) return 400;
   if (isImagePermissionError(status, message)) return 403;
+  // 线路没在中转站登记：这是"配置缺失"，不是"服务器/超时"，状态保持客户端错误。
+  if (isImageManualChannelNotFoundError(message)) return 400;
+  // 线路只允许手动选线：同样是客户端参数问题。
+  if (isImageManualDispatchRequiredError(message)) return 400;
   if (isImageRouteNotFoundError(status, message)) return 502;
   if (shouldTryNextChannel(status, message) || status >= 500 || status === 429 || !status) return 504;
   return status;
@@ -2136,6 +2170,13 @@ function imageFailureMessage(status, upstreamMessage, params, _attempts) {
   if (isImageQuotaError(status, message)) return quotaFailureMessage(message);
   if (isImageTooLargeError(message)) return "上传图片过大，请压缩或更换素材后重新生成。";
   if (isImagePermissionError(status, message)) return "当前 KEY 无权限调用该模型，请检查账号权限。";
+  // 线路在中转站没登记：换线路能马上恢复，重试同一条线路永远不会成功。
+  if (isImageManualChannelNotFoundError(message)) {
+    return "所选线路在中转站尚未开通，请换一条线路；若每条线路都报这个错，请联系管理员。";
+  }
+  if (isImageManualDispatchRequiredError(message)) {
+    return "所选线路只支持手动选线（dispatchMode=manual），请重新选择线路后重试。";
+  }
   if (isImageRouteNotFoundError(status, message)) return imageRouteFailureMessage(params);
   if (/model_not_found|model.*not.*found|模型.*不存在|unsupported.*model/i.test(message)) {
     return "当前模型暂不可用，请稍后重新生成。";
@@ -2154,6 +2195,8 @@ function publicImageErrorCode(status, message) {
   if (isImageQuotaError(status, message)) return "insufficient_quota";
   if (isImageTooLargeError(message)) return "image_too_large";
   if (isImagePermissionError(status, message)) return "permission_denied";
+  if (isImageManualChannelNotFoundError(message)) return "channel_not_available";
+  if (isImageManualDispatchRequiredError(message)) return "manual_dispatch_required";
   if (isImageRouteNotFoundError(status, message)) return "channel_route_not_found";
   if (/model_not_found|model.*not.*found|模型.*不存在|unsupported.*model/i.test(String(message || ""))) return "model_unavailable";
   // 2026-09-25：上游真的返回了 HTTP 5xx/429 时，不要再统一报成"超时"。
@@ -4744,6 +4787,7 @@ app.post("/api/generate-outfit", wrapOutfitUpload(imageForwardUpload.fields([
             requestVariant: variant.id,
             requestFormat: variant.requestFormat,
             requestedModel: params.model,
+            requestedChannelId: params.channelId,
             model: variant.model,
             protocol: variant.protocol,
             imageSize: params.imageSize,
@@ -4800,6 +4844,7 @@ app.post("/api/generate-outfit", wrapOutfitUpload(imageForwardUpload.fields([
             requestVariant: variant.id,
             requestFormat: variant.requestFormat,
             requestedModel: params.model,
+            requestedChannelId: params.channelId,
             model: variant.model,
             protocol: variant.protocol,
             imageSize: params.imageSize,
@@ -5383,6 +5428,7 @@ app.post("/api/images", wrapOutfitUpload(imageForwardUpload.array("image", IMAGE
             requestFormat: variant.requestFormat,
             protocol: variant.protocol,
             requestedModel: params.model,
+            requestedChannelId: params.channelId,
             model: variant.model,
             imageSize: params.imageSize,
             aspectRatio: params.aspectRatio,
@@ -5436,6 +5482,7 @@ app.post("/api/images", wrapOutfitUpload(imageForwardUpload.array("image", IMAGE
             requestFormat: variant.requestFormat,
             protocol: variant.protocol,
             requestedModel: params.model,
+            requestedChannelId: params.channelId,
             model: variant.model,
             imageSize: params.imageSize,
             aspectRatio: params.aspectRatio,
@@ -5563,6 +5610,7 @@ app.post("/api/images", wrapOutfitUpload(imageForwardUpload.array("image", IMAGE
             requestFormat: variant.requestFormat,
             protocol: variant.protocol,
             requestedModel: params.model,
+            requestedChannelId: params.channelId,
             model: variant.model,
             imageSize: params.imageSize,
             aspectRatio: params.aspectRatio,

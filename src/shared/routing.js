@@ -56,8 +56,9 @@ export const HIDDEN_CHANNEL_IDS = Object.freeze([
   "silent-tt2-line-05",
   "silent-tt2-line-06",
   "silent-tt2-line-07",
-  // 2026-09-26：香蕉 2（banana-2）的「云枢」前端隐藏（服务端目录/校验照旧认）。
-  // 香蕉 2 白名单原本两条（Subdirect / 云枢），隐藏后前端只剩 Subdirect。
+  // 2026-09-26（按用户要求）：香蕉 2 的「云枢」只在前端隐藏，中转站线路照旧 ACTIVE，
+  // 服务端目录与服务端校验也照旧认（isForbiddenChannelId 为 false）。
+  // 隐藏后香蕉 2 前端只剩 Subdirect → Origin 两条。
   "silent-banana-line-07"
 ]);
 
@@ -69,12 +70,17 @@ export function isHiddenChannelId(value) {
   return HIDDEN_CHANNEL_ID_SET.has(String(value || "").trim().toLowerCase());
 }
 
-// 香蕉 2 只允许这两条线路（Subdirect / 云枢）。
+// 香蕉 2 白名单三条：Subdirect → 云枢 → Origin，统一 ¥0.12/张。
+// 其中「云枢」（silent-banana-line-07）在 HIDDEN_CHANNEL_IDS 里，**只在前端隐藏**，
+// 所以前端菜单实际显示 Subdirect → Origin 两条；服务端目录与服务端校验照旧认三条。
 // 香蕉 Pro 只允许这两条线路（Subdirect / Origin）。
 export const MODEL_CHANNEL_ALLOWLIST = Object.freeze({
   "banana-2": Object.freeze([
     { id: "silent-banana-line-08", label: "Subdirect", price: 0.12 },
-    { id: "silent-banana-line-07", label: "云枢", price: 0.12 }
+    { id: "silent-banana-line-07", label: "云枢", price: 0.12 },
+    // Origin 香蕉 2 的独立 channelId（不复用 Pro 的 silent-pro-line-09）。
+    // 全仓库只允许 banana-2 使用它；其它模型带上它一律 channel_model_mismatch。
+    { id: "silent-banana-line-09", label: "Origin", price: 0.12 }
   ]),
   "nano-banana-pro": Object.freeze([
     { id: "silent-pro-line-10", label: "Subdirect", price: 0.14 },
@@ -230,24 +236,25 @@ function normalizeChannelRow(channel, model, priceOverride) {
 // 与 server/channel-config.js 的 ROUTING_CHANNELS 保持一致，且不含任何已下线线路。
 // 目录一旦加载完成，一律以目录为准。
 export const FALLBACK_MODEL_CHANNELS = Object.freeze({
+  // Origin 排第一，与 server/channel-config.js 的 ROUTING_CHANNELS 顺序一致。
   "tt-image-2": Object.freeze([
+    { id: "silent-tt2-line-11", label: "Origin", price: 0.1 },
     { id: "silent-tt2-line-10", label: "云枢", price: 0.1 },
     { id: "silent-tt2-line-03", label: "XT-default", price: 0.1 },
     { id: "silent-tt2-line-05", label: "ZYG-default", price: 0.1 },
     { id: "silent-tt2-line-06", label: "ZYG-svip", price: 0.1 },
     { id: "silent-tt2-line-07", label: "ZYG-vip", price: 0.1 },
-    { id: "silent-tt2-line-11", label: "Origin", price: 0.1 },
     { id: "silent-tt2-line-12", label: "laoye", price: 0.1 },
     { id: "silent-tt2-line-01", label: "MC-TT-cf", price: 0.11 },
     { id: "silent-tt2-line-02", label: "XT2", price: 0.11 },
     { id: "silent-tt2-line-09", label: "速创", price: 0.11 }
   ]),
   "tt-image-2.5": Object.freeze([
+    { id: "silent-tt25-line-06", label: "Origin", price: 0.1 },
     { id: "silent-tt25-line-01", label: "XT-image2-s", price: 0.1 },
     { id: "silent-tt25-line-02", label: "XT-特殊分组", price: 0.1 },
     { id: "silent-tt25-line-03", label: "XT-default", price: 0.1 },
     { id: "silent-tt25-line-05", label: "云枢", price: 0.1 },
-    { id: "silent-tt25-line-06", label: "Origin", price: 0.1 },
     { id: "silent-tt25-line-04", label: "BR-default特价", price: 0.12 }
   ]),
   // 香蕉 2 / 香蕉 Pro 用白名单本身兜底，不在这里重复维护。

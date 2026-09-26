@@ -81,6 +81,35 @@ const CASES = [
     expectKind: GENERATION_ERROR_KINDS.CHANNEL_UNAVAILABLE
   },
   {
+    // 2026-09-26 事故回归：中转站没有这条线路时，服务端现在回 400 + channel_not_available，
+    // 前端必须报"模型或渠道不可用"，绝不能因为文案里带过"超时"字样而落到"请求超时"。
+    name: "4c 线路未在中转站开通（channel_not_available）",
+    error: new FakeApiError("所选线路在中转站尚未开通，请换一条线路；若每条线路都报这个错，请联系管理员。", {
+      status: 400,
+      payload: {
+        error: "channel_not_available",
+        message: "所选线路在中转站尚未开通，请换一条线路；若每条线路都报这个错，请联系管理员。",
+        requestId: "req-line-missing-1"
+      }
+    }),
+    context: {},
+    expectKind: GENERATION_ERROR_KINDS.CHANNEL_UNAVAILABLE
+  },
+  {
+    // 2026-09-26：有些线路只允许手动选线（strictManualDispatch）。带 channelId 但
+    // dispatchMode 不是 manual 时中转站返回 400 manual_dispatch_required。
+    name: "4d 线路只允许手动选线（manual_dispatch_required）",
+    error: new FakeApiError("所选线路只支持手动选线（dispatchMode=manual），请重新选择线路后重试。", {
+      status: 400,
+      payload: {
+        error: "manual_dispatch_required",
+        message: "所选线路只支持手动选线（dispatchMode=manual），请重新选择线路后重试。"
+      }
+    }),
+    context: {},
+    expectKind: GENERATION_ERROR_KINDS.CHANNEL_UNAVAILABLE
+  },
+  {
     name: "5 参数不支持/参数错误",
     error: new FakeApiError("unsupported aspect ratio 7:3", { status: 400, payload: { error: "invalid_request_error", message: "unsupported aspect ratio 7:3" } }),
     context: {},
@@ -143,6 +172,42 @@ for (const item of CASES) {
   check(`${item.name}：settled=true（调用方可据此结束 loading）`, info.settled === true, `settled=${info.settled}`);
   const text = formatGenerationError(item.error, item.context);
   check(`${item.name}：最终文案不是笼统的「生成失败」`, !/^生成失败$/.test(text.trim()) && text.length > 4, text);
+}
+
+// 2026-09-26 事故回归：区分"线路未开通"和"请求超时"
+{
+  // 对照组：旧行为（504 + channel_timeout + 文案"生成超时"）确实会被判成请求超时。
+  const legacy = new FakeApiError("生成超时，请重新生成。", {
+    status: 504,
+    payload: { error: "channel_timeout", message: "生成超时，请重新生成。" }
+  });
+  check("事故回归：旧形状（504/channel_timeout）确实是「请求超时」（对照组）",
+    classifyGenerationError(legacy, {}).kind === GENERATION_ERROR_KINDS.TIMEOUT,
+    classifyGenerationError(legacy, {}).kind);
+
+  // 修复后：同样是"线路没在中转站登记"，服务端回 400 + channel_not_available。
+  const fixed = new FakeApiError("所选线路在中转站尚未开通，请换一条线路；若每条线路都报这个错，请联系管理员。", {
+    status: 400,
+    payload: {
+      error: "channel_not_available",
+      message: "所选线路在中转站尚未开通，请换一条线路；若每条线路都报这个错，请联系管理员。"
+    }
+  });
+  const fixedInfo = classifyGenerationError(fixed, {});
+  const fixedText = formatGenerationError(fixed, {});
+  check("事故回归：修复后归到模型或渠道不可用",
+    fixedInfo.kind === GENERATION_ERROR_KINDS.CHANNEL_UNAVAILABLE, `got=${fixedInfo.kind}`);
+  check("事故回归：文案里没有「超时」字样，用户不会误以为要重试",
+    /尚未开通/.test(fixedText) && !/超时/.test(fixedText), fixedText);
+
+  // 中转站直接透出原始错误码时也要能认出来（服务端没兜住的情况）。
+  const rawCode = new FakeApiError("manual_channel_not_found", {
+    status: 400,
+    payload: { error: "manual_channel_not_found", message: "manual_channel_not_found" }
+  });
+  check("事故回归：原始 manual_channel_not_found 也归到渠道不可用",
+    classifyGenerationError(rawCode, {}).kind === GENERATION_ERROR_KINDS.CHANNEL_UNAVAILABLE,
+    classifyGenerationError(rawCode, {}).kind);
 }
 
 // requestId 透出

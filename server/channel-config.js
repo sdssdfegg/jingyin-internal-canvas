@@ -56,25 +56,34 @@ export const DEFAULT_MAX_IMAGE_BYTES = 16 * 1024 * 1024;
 // 与 3.0 `/api/ecommerce/routing` 对齐的客户可见模型目录。
 // 线路 ID 是静音中转适配器的 publicId，不能替换成本地自造 ID。
 const ROUTING_CHANNELS = Object.freeze([
+  // 2026-09-26：TT Image 2（2.0）与 TT Image 2.5（2.5）都把 Origin 排到第一位。
+  // 数组顺序 = 前端菜单顺序；第一条同时也是"用户没选过线路时"的默认线路
+  // （channelForModel / convergeSettingsForModel 都取 channels[0]）。
+  // 2.0 的 Origin 与其它 2.0 线路同价（0.10），所以改默认线路不影响价格口径。
+  { id: "silent-tt2-line-11", label: "Origin", price: 0.10, model: "tt-image-2" },
   { id: "silent-tt2-line-10", label: "云枢", price: 0.10, model: "tt-image-2" },
   { id: "silent-tt2-line-03", label: "XT-default", price: 0.10, model: "tt-image-2" },
   { id: "silent-tt2-line-05", label: "ZYG-default", price: 0.10, model: "tt-image-2" },
   { id: "silent-tt2-line-06", label: "ZYG-svip", price: 0.10, model: "tt-image-2" },
   { id: "silent-tt2-line-07", label: "ZYG-vip", price: 0.10, model: "tt-image-2" },
-  { id: "silent-tt2-line-11", label: "Origin", price: 0.10, model: "tt-image-2" },
   { id: "silent-tt2-line-12", label: "laoye", price: 0.10, model: "tt-image-2" },
   { id: "silent-tt2-line-01", label: "MC-TT-cf", price: 0.11, model: "tt-image-2" },
   { id: "silent-tt2-line-02", label: "XT2", price: 0.11, model: "tt-image-2" },
   { id: "silent-tt2-line-09", label: "速创", price: 0.11, model: "tt-image-2" },
+  { id: "silent-tt25-line-06", label: "Origin", price: 0.10, model: "tt-image-2.5" },
   { id: "silent-tt25-line-01", label: "XT-image2-s", price: 0.10, model: "tt-image-2.5" },
   { id: "silent-tt25-line-02", label: "XT-特殊分组", price: 0.10, model: "tt-image-2.5" },
   { id: "silent-tt25-line-03", label: "XT-default", price: 0.10, model: "tt-image-2.5" },
   { id: "silent-tt25-line-05", label: "云枢", price: 0.10, model: "tt-image-2.5" },
-  { id: "silent-tt25-line-06", label: "Origin", price: 0.10, model: "tt-image-2.5" },
   { id: "silent-tt25-line-04", label: "BR-default特价", price: 0.12, model: "tt-image-2.5" },
-  // 香蕉 2：仅展示用户指定的两条线路。
+  // 香蕉 2：仅展示用户指定的三条线路，顺序固定 Subdirect → 云枢 → Origin，三条统一 ¥0.12/张。
+  // 数组顺序就是前端菜单顺序（channelsForModel 按白名单顺序输出），不要重排。
+  // `silent-banana-line-09` 是 Origin 香蕉 2 的客户端 channelId：它必须由静音中转站
+  // 适配器侧先登记成一条 Origin 线路（上游 model=nano-banana-2）才会真正生效；
+  // 本地源码只负责把这条线路发出去，不把任何上游 KEY 放进客户端。
   { id: "silent-banana-line-08", label: "Subdirect", price: 0.12, model: "banana-2" },
   { id: "silent-banana-line-07", label: "云枢", price: 0.12, model: "banana-2" },
+  { id: "silent-banana-line-09", label: "Origin", price: 0.12, model: "banana-2" },
   // 香蕉 Pro：仅展示用户指定的两条线路。
   { id: "silent-pro-line-10", label: "Subdirect", price: 0.14, model: "nano-banana-pro" },
   { id: "silent-pro-line-09", label: "Origin", price: 0.16, model: "nano-banana-pro" }
@@ -92,16 +101,6 @@ export const ROUTING_MODELS = Object.freeze([
     maxImageBytes: DEFAULT_MAX_IMAGE_BYTES
   },
   {
-    value: "banana-2",
-    label: "纳米香蕉 2",
-    ratios: ["1:1", "2:3", "3:4", "4:3", "16:9", "9:16"],
-    sizes: ["1K", "2K"],
-    maxInputImages: 14,
-    quality: ["auto", "low", "medium", "high"],
-    maxPromptLength: DEFAULT_MAX_PROMPT_LENGTH,
-    maxImageBytes: DEFAULT_MAX_IMAGE_BYTES
-  },
-  {
     value: "tt-image-2.5",
     label: "TT Image 2.5",
     ratios: ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "2:1", "1:2", "21:9", "9:21"],
@@ -111,6 +110,16 @@ export const ROUTING_MODELS = Object.freeze([
     versions: ["flare", "sunburst"],
     backgrounds: ["opaque", "transparent", "auto"],
     customSize: true,
+    maxPromptLength: DEFAULT_MAX_PROMPT_LENGTH,
+    maxImageBytes: DEFAULT_MAX_IMAGE_BYTES
+  },
+  {
+    value: "banana-2",
+    label: "纳米香蕉 2",
+    ratios: ["1:1", "2:3", "3:4", "4:3", "16:9", "9:16"],
+    sizes: ["1K", "2K"],
+    maxInputImages: 14,
+    quality: ["auto", "low", "medium", "high"],
     maxPromptLength: DEFAULT_MAX_PROMPT_LENGTH,
     maxImageBytes: DEFAULT_MAX_IMAGE_BYTES
   },

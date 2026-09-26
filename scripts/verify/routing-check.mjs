@@ -2,14 +2,14 @@
 //
 // 覆盖验收项：
 //   1. 接口和 DOM 中旧渠道 ID / 旧渠道名称数量为 0
-//   2. 香蕉 2 只有 Subdirect 和云枢
+//   2. 香蕉 2 只有 Subdirect / 云枢 / Origin 三条线路，顺序固定，均 ¥0.12
 //   3. 香蕉 Pro 只有 Subdirect 和 Origin
 //   4. 旧 nano-banana2 存档最终发出 banana-2
-//   5. 非法 channelId 被服务端拒绝
+//   5. 非法 channelId / 非法模型+线路组合被服务端拒绝
 //   6. 模型切换后图片数量 / 文件大小 / 提示词长度 / 比例正确收敛
 //
 // 用法：node scripts/verify/routing-check.mjs
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
@@ -126,26 +126,178 @@ for (const token of [...FORBIDDEN_TOKENS, ...FORBIDDEN_IDS]) {
 }
 
 // ---------------------------------------------------------------- 线路白名单
-// 2026-09-26：香蕉 2 的云枢改成**前端隐藏**，所以白名单仍有两条（服务端照旧认），
-// 但前端 channelsForModel 只剩 Subdirect —— 下面两条分别断言"白名单"和"前端可见"。
+// 2026-09-26（按用户要求）三件事：
+//   1. 模型顺序固定 2.0 → 2.5 → 香蕉 2 → 香蕉 Pro；
+//   2. 2.0 / 2.5 的 Origin 线路排第一位（也是这两条模型的默认线路）；
+//   3. 香蕉 2 的「云枢」只在前端隐藏（中转站线路照旧 ACTIVE，服务端目录/校验照旧认）。
+// 香蕉 2 白名单仍是三条 Subdirect → 云枢 → Origin，统一 ¥0.12/张；前端实际显示 Subdirect → Origin。
+const MODEL_ORDER = ["tt-image-2", "tt-image-2.5", "banana-2", "nano-banana-pro"];
+check(
+  "模型顺序 = 2.0 → 2.5 → 香蕉 2 → 香蕉 Pro",
+  JSON.stringify((catalog.models || []).map((model) => model.id)) === JSON.stringify(MODEL_ORDER),
+  JSON.stringify((catalog.models || []).map((model) => model.id))
+);
+for (const [modelId, originId] of [["tt-image-2", "silent-tt2-line-11"], ["tt-image-2.5", "silent-tt25-line-06"]]) {
+  const rows = routingModule.channelsForModel(modelId, catalog);
+  check(
+    `${modelId} 的第一条线路是 Origin`,
+    rows[0]?.id === originId && rows[0]?.label === "Origin",
+    JSON.stringify(rows.slice(0, 3).map((item) => `${item.label}/${item.price}`))
+  );
+  check(
+    `${modelId} 的默认线路就是 Origin`,
+    routingModule.defaultChannelForModel(modelId, catalog) === originId,
+    routingModule.defaultChannelForModel(modelId, catalog)
+  );
+}
+check(
+  "2.0 / 2.5 的 Origin 价格仍是各自原来的 0.10（只改顺序，不改价）",
+  routingModule.channelsForModel("tt-image-2", catalog)[0]?.price === 0.1
+    && routingModule.channelsForModel("tt-image-2.5", catalog)[0]?.price === 0.1,
+  JSON.stringify([
+    routingModule.channelsForModel("tt-image-2", catalog)[0]?.price,
+    routingModule.channelsForModel("tt-image-2.5", catalog)[0]?.price
+  ])
+);
+
+const BANANA_LINE_IDS = ["silent-banana-line-08", "silent-banana-line-07", "silent-banana-line-09"];
+const BANANA_LINE_LABELS = ["Subdirect", "云枢", "Origin"];
+const BANANA_LINE_PRICE = 0.12;
+const BANANA_HIDDEN_ID = "silent-banana-line-07";
 const bananaAllowlist = routingModule.MODEL_CHANNEL_ALLOWLIST["banana-2"];
 const bananaChannels = routingModule.channelsForModel("banana-2", catalog);
 check(
-  "香蕉 2 白名单仍是 Subdirect + 云枢（服务端口径不变）",
-  bananaAllowlist.length === 2
-    && bananaAllowlist[0].id === "silent-banana-line-08"
-    && bananaAllowlist[0].label === "Subdirect"
-    && bananaAllowlist[1].id === "silent-banana-line-07"
-    && bananaAllowlist[1].label === "云枢",
+  "香蕉 2 白名单是 Subdirect + 云枢 + Origin（三条，顺序固定）",
+  bananaAllowlist.length === 3
+    && bananaAllowlist.every((item, index) => item.id === BANANA_LINE_IDS[index] && item.label === BANANA_LINE_LABELS[index]),
   JSON.stringify(bananaAllowlist.map((item) => [item.id, item.label, item.price]))
 );
 check(
-  "香蕉 2 前端只剩 Subdirect（云枢已隐藏）",
-  bananaChannels.length === 1
+  "香蕉 2 三条白名单线路价格都是 0.12",
+  bananaAllowlist.length === 3 && bananaAllowlist.every((item) => Number(item.price) === BANANA_LINE_PRICE),
+  JSON.stringify(bananaAllowlist.map((item) => [item.label, item.price]))
+);
+check(
+  "香蕉 2 前端菜单 = Subdirect → Origin（云枢已隐藏，Origin 紧随其后）",
+  bananaChannels.length === 2
     && bananaChannels[0].id === "silent-banana-line-08"
-    && bananaChannels[0].label === "Subdirect",
+    && bananaChannels[0].label === "Subdirect"
+    && bananaChannels[1].id === "silent-banana-line-09"
+    && bananaChannels[1].label === "Origin",
   JSON.stringify(bananaChannels.map((item) => [item.id, item.label, item.price]))
 );
+check(
+  "香蕉 2 前端两条线路价格都是 0.12",
+  bananaChannels.length === 2 && bananaChannels.every((item) => Number(item.price) === BANANA_LINE_PRICE),
+  JSON.stringify(bananaChannels.map((item) => [item.label, item.price]))
+);
+check(
+  "香蕉 2 的云枢是「前端隐藏」而不是「下架」",
+  routingModule.isHiddenChannelId(BANANA_HIDDEN_ID)
+    && !routingModule.isForbiddenChannelId(BANANA_HIDDEN_ID)
+    && (catalog.channels || []).some((channel) => channel.id === BANANA_HIDDEN_ID),
+  `hidden=${routingModule.isHiddenChannelId(BANANA_HIDDEN_ID)} forbidden=${routingModule.isForbiddenChannelId(BANANA_HIDDEN_ID)}`
+);
+check(
+  "香蕉 2 的 Origin channelId 与 Pro / Subdirect / 云枢都不冲突",
+  new Set([...BANANA_LINE_IDS, "silent-pro-line-09", "silent-pro-line-10"]).size === BANANA_LINE_IDS.length + 2,
+  BANANA_LINE_IDS.join(",")
+);
+
+// 顺序稳定性：刷新页面 / 切换模型来回切 / 读旧存档都不能改变这些顺序。
+const bananaOrderFirst = routingModule.channelsForModel("banana-2", catalog).map((item) => item.id).join(",");
+const bananaOrderSecond = routingModule.channelsForModel("banana-2", catalog).map((item) => item.id).join(",");
+check(
+  "香蕉 2 默认线路固定是排第一的 Subdirect",
+  routingModule.defaultChannelForModel("banana-2", catalog) === "silent-banana-line-08",
+  routingModule.defaultChannelForModel("banana-2", catalog)
+);
+check(
+  "重复取线路目录结果完全一致（刷新/重渲染不会改顺序）",
+  bananaOrderFirst === bananaOrderSecond,
+  bananaOrderFirst
+);
+{
+  // 切换到别的模型再切回来，香蕉 2 的可见线路顺序与价格不变。
+  const roundTrip = routingModule.convergeSettingsForModel(
+    routingModule.convergeSettingsForModel({ model: "banana-2", channelId: "silent-banana-line-09" }, catalog),
+    catalog
+  );
+  const afterSwitch = routingModule.channelsForModel(roundTrip.model, catalog);
+  check(
+    "切模型来回后香蕉 2 仍是 Subdirect → Origin，且 Origin 这条线路被保留",
+    roundTrip.model === "banana-2"
+      && roundTrip.channelId === "silent-banana-line-09"
+      && afterSwitch.length === 2
+      && afterSwitch[1].id === "silent-banana-line-09",
+    JSON.stringify(afterSwitch.map((item) => `${item.label}:${item.price}`))
+  );
+}
+{
+  // 旧存档：云枢现在只在前端隐藏，所以旧存档里的云枢要收敛到第一条可见线路 Subdirect。
+  const legacyCloud = routingModule.convergeSettingsForModel({ model: "banana-2", channelId: BANANA_HIDDEN_ID }, catalog);
+  check(
+    "旧存档选着香蕉 2 云枢 → 收敛到第一条可见线路 Subdirect（界面与请求一致）",
+    legacyCloud.channelId === "silent-banana-line-08",
+    `channelId=${legacyCloud.channelId}`
+  );
+  // 服务端仍然接受云枢（隐藏 ≠ 删除）：请求用旧 channelId 也能通过校验。
+  const hiddenParams = channelModule.normalizeImageRequest({
+    model: "banana-2", channelId: BANANA_HIDDEN_ID, prompt: "x", imageSize: "2K", aspectRatio: "3:4"
+  });
+  check("服务端仍然接受香蕉 2 云枢（与「删除」不同）",
+    channelModule.validateImageRouting(hiddenParams).ok === true,
+    channelModule.validateImageRouting(hiddenParams).code);
+  // 旧存档里的未知线路 -> 收敛到第一条（Subdirect），顺序表的第一位。
+  const legacyUnknown = routingModule.convergeSettingsForModel({ model: "banana-2", channelId: "silent-banana-line-99" }, catalog);
+  check(
+    "旧存档里的未知香蕉 2 线路 → 收敛到第一条 Subdirect",
+    legacyUnknown.channelId === "silent-banana-line-08",
+    `channelId=${legacyUnknown.channelId}`
+  );
+  // 旧存档里的旧模型 ID 读回来仍旧落进同一套三条线路。
+  const legacyModelId = routingModule.convergeSettingsForModel({ model: "nano-banana2", channelId: "silent-banana-line-09" }, catalog);
+  check(
+    "旧存档模型 ID nano-banana2 + Origin 线路 → 仍是 banana-2 的 Origin（白名单第三条）",
+    legacyModelId.model === "banana-2" && legacyModelId.channelId === "silent-banana-line-09",
+    JSON.stringify({ model: legacyModelId.model, channelId: legacyModelId.channelId })
+  );
+}
+
+// 目录侧（/api/config 的 routing.channels）也必须是同样三条、同样顺序、同样价格。
+{
+  const catalogBanana = (catalog.channels || [])
+    .filter((channel) => (channel.supportedModels || []).includes("banana-2"))
+    .map((channel) => ({
+      id: channel.id,
+      label: channel.label,
+      price: Number(channel.pricing?.["banana-2"]?.price ?? 0)
+    }));
+  check(
+    "服务端目录里香蕉 2 也是三条（顺序/价格与白名单一致）",
+    catalogBanana.length === 3
+      && catalogBanana.every((item, index) => item.id === BANANA_LINE_IDS[index] && item.label === BANANA_LINE_LABELS[index])
+      && catalogBanana.every((item) => item.price === BANANA_LINE_PRICE),
+    JSON.stringify(catalogBanana.map((item) => [item.id, item.label, item.price]))
+  );
+}
+
+// 前端两条路径（快捷生成 main.jsx / 批量换装 outfit-workflow.jsx）都从同一个目录取线路，
+// 这里同时断言"源头一致"，避免以后只改一处。
+{
+  const mainSrc = read("src/main.jsx");
+  const outfitSrc = read("src/outfit-workflow.jsx");
+  check(
+    "快捷生成与批量换装用同一个线路目录（channelsForModel）",
+    mainSrc.includes("channelsForModel(settings.model") && outfitSrc.includes("channelsForModel(settings.model"),
+    "main.jsx + outfit-workflow.jsx"
+  );
+  check(
+    "快捷生成与批量换装用同一套路由字段（routingFields）",
+    mainSrc.includes("routingFields(") && outfitSrc.includes("routingFields("),
+    "main.jsx + outfit-workflow.jsx"
+  );
+}
 
 const proChannels = routingModule.channelsForModel("nano-banana-pro", catalog);
 check(
@@ -274,30 +426,56 @@ check("老存档选着被隐藏的 ZYG → 落到未隐藏的合法线路（界�
   !HIDDEN_IDS.includes(legacyZyg.channelId) && tt2Visible.some((item) => item.id === legacyZyg.channelId),
   `channelId=${legacyZyg.channelId}`);
 
-// 2026-09-26：香蕉 2 的「云枢」（silent-banana-line-07）也是前端隐藏。
-const BANANA_HIDDEN_ID = "silent-banana-line-07";
-const bananaVisible = routingModule.channelsForModel("banana-2", catalog);
-check("香蕉 2 的「云枢」在前端菜单里消失（白名单两条 → 只剩 Subdirect）",
-  bananaVisible.length === 1
-    && bananaVisible[0].id === "silent-banana-line-08"
-    && !bananaVisible.some((item) => item.id === BANANA_HIDDEN_ID),
-  JSON.stringify(bananaVisible.map((item) => `${item.id}:${item.label}`)));
-check("香蕉 2 云枢是「前端隐藏」而不是「下架」（服务端目录里还在、也不是禁用名单）",
-  routingModule.isHiddenChannelId(BANANA_HIDDEN_ID)
-    && !routingModule.isForbiddenChannelId(BANANA_HIDDEN_ID)
-    && (catalog.channels || []).some((channel) => channel.id === BANANA_HIDDEN_ID),
-  "isHidden=true / isForbidden=false / 目录仍在");
+// 2026-09-26（按用户要求）：香蕉 2 的「云枢」（silent-banana-line-07）改成只在前端隐藏。
+// 这里守住"隐藏/下架是两套机制"这条边界：云枢在隐藏名单里，但不在禁用名单里，服务端目录也还在。
 {
-  const bananaRoute = routingModule.routingFields("banana-2", BANANA_HIDDEN_ID, catalog);
-  check("用旧 channelId 选云枢 → 收敛到剩余合法线路（界面与请求一致）",
-    bananaRoute.channelId === "silent-banana-line-08",
-    `channelId=${bananaRoute.channelId}`);
-  const params = channelModule.normalizeImageRequest({
-    model: "banana-2", channelId: BANANA_HIDDEN_ID, prompt: "x", imageSize: "2K", aspectRatio: "3:4"
+  const bananaVisible = routingModule.channelsForModel("banana-2", catalog);
+  check("香蕉 2 的「云枢」已从前端菜单隐藏",
+    !bananaVisible.some((item) => item.id === "silent-banana-line-07")
+      && routingModule.isHiddenChannelId("silent-banana-line-07"),
+    JSON.stringify(bananaVisible.map((item) => `${item.id}:${item.label}`)));
+  check("香蕉 2 云枢没有变成「下架」（不在禁用名单，服务端目录仍在）",
+    routingModule.isHiddenChannelId("silent-banana-line-07")
+      && !routingModule.isForbiddenChannelId("silent-banana-line-07")
+      && (catalog.channels || []).some((channel) => channel.id === "silent-banana-line-07"),
+    "isHidden=true / isForbidden=false / 目录仍在");
+
+  // Origin 第三线路：路由字段必须是 model=banana-2 + Origin 自己的 channelId + manual
+  const originRoute = routingModule.routingFields("banana-2", "silent-banana-line-09", catalog);
+  check("Origin 线路路由字段 = banana-2 + silent-banana-line-09 + manual",
+    originRoute.model === "banana-2"
+      && originRoute.channelId === "silent-banana-line-09"
+      && originRoute.dispatchMode === "manual",
+    JSON.stringify(originRoute));
+  const originParams = channelModule.normalizeImageRequest({
+    model: "banana-2", channelId: "silent-banana-line-09", dispatchMode: "manual",
+    prompt: "x", imageSize: "2K", aspectRatio: "3:4"
   });
-  check("服务端仍然接受香蕉 2 云枢（与「删除」不同）",
-    channelModule.validateImageRouting(params).ok === true,
-    channelModule.validateImageRouting(params).code);
+  check("服务端接受 Origin 香蕉 2 线路（banana-2 + silent-banana-line-09）",
+    channelModule.validateImageRouting(originParams).ok === true,
+    channelModule.validateImageRouting(originParams).code);
+
+  // 只允许该 Origin channelId 与 banana-2 组合：其它模型带上它就是非法组合。
+  for (const otherModel of ["nano-banana-pro", "tt-image-2", "tt-image-2.5"]) {
+    const crossParams = channelModule.normalizeImageRequest({
+      model: otherModel, channelId: "silent-banana-line-09", dispatchMode: "manual",
+      prompt: "x", imageSize: "2K", aspectRatio: "3:4"
+    });
+    const crossResult = channelModule.validateImageRouting(crossParams);
+    check(`Origin 香蕉 2 线路不能给 ${otherModel} 用（channel_model_mismatch）`,
+      crossResult.ok === false && crossResult.code === "channel_model_mismatch",
+      crossResult.code);
+  }
+  // 反过来：banana-2 也不能蹭别的模型的 Origin 线路。
+  for (const foreignOrigin of ["silent-pro-line-09", "silent-tt2-line-11", "silent-tt25-line-06"]) {
+    const params = channelModule.normalizeImageRequest({
+      model: "banana-2", channelId: foreignOrigin, dispatchMode: "manual", prompt: "x"
+    });
+    const result = channelModule.validateImageRouting(params);
+    check(`banana-2 不能使用别的模型的 Origin 线路 ${foreignOrigin}`,
+      result.ok === false && result.code === "channel_model_mismatch",
+      result.code);
+  }
 }
 
 // ---------------------------------------------------------------- 能力收敛
@@ -327,9 +505,9 @@ const toTt25 = routingModule.convergeSettingsForModel({
   model: "tt-image-2.5"
 }, fakeCatalog);
 check(
-  "切到 tt-image-2.5：数量收敛到 8 且渠道换到合法线路",
+  "切到 tt-image-2.5：数量收敛到 8 且渠道换到合法线路（默认=第一条 Origin）",
   toTt25.n === 8
-    && toTt25.channelId === "silent-tt25-line-01"
+    && toTt25.channelId === "silent-tt25-line-06"
     && routingModule.channelsForModel("tt-image-2.5", fakeCatalog).some((item) => item.id === toTt25.channelId),
   JSON.stringify(toTt25)
 );
@@ -445,6 +623,7 @@ const ROUTE_FIELD_CASES = [
   ["nano-banana-pro", "silent-pro-line-09"],
   ["banana-2", "silent-banana-line-08"],
   ["banana-2", "silent-banana-line-07"],
+  ["banana-2", "silent-banana-line-09"],
   ["tt-image-2", "silent-tt2-line-10"],
   ["tt-image-2.5", "silent-tt25-line-01"]
 ];
@@ -484,6 +663,80 @@ for (const proLine of ["silent-pro-line-10", "silent-pro-line-09"]) {
     prompt: "x"
   });
   check(`香蕉 Pro 线路通过路由校验 :: ${proLine}`, channelModule.validateImageRouting(proParams).ok === true);
+}
+
+// ------------------------------------------- 客户端边界（Origin KEY 不允许进浏览器）
+// 本轮只把 Origin 香蕉 2 的 channelId 放进客户端目录；Origin 的 KEY 依旧只存在
+// 静音中转站的适配器配置里，客户端不出现任何上游域名或密钥字面量。
+{
+  const clientFiles = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.(jsx?|mjs)$/.test(entry.name)) clientFiles.push(path.relative(root, full));
+    }
+  };
+  walk(path.join(root, "src"));
+  const offenders = [];
+  for (const file of clientFiles) {
+    const text = read(file);
+    if (/origingateway/i.test(text)) offenders.push(`${file}:origin-host`);
+    if (/\bsk-[A-Za-z0-9_-]{8,}/.test(text)) offenders.push(`${file}:key-literal`);
+  }
+  check(
+    `客户端源码(${clientFiles.length} 个文件)不含 Origin 上游域名与任何密钥字面量`,
+    offenders.length === 0,
+    offenders.join(",") || "0 命中"
+  );
+
+  // 生图接口地址只允许静音中转站（server/channel-config.js 的唯一来源）。
+  const allowedBases = channelConfigModule.LOCKED_CHANNEL_API_BASE_URLS || [];
+  const gatewayModule = await import(new URL("../../server/features/api-gateway/gateways/jingyin-online.js", import.meta.url));
+  const gatewayDefaultBase = String(gatewayModule.JINGYIN_ONLINE_GATEWAY?.defaultBaseUrl || "");
+  check(
+    "生图上游只有静音中转站一个候选地址",
+    allowedBases.length === 1
+      && allowedBases[0] === channelConfigModule.PRIMARY_CHANNEL_API_BASE_URL
+      && gatewayDefaultBase === "https://api.jingyin.online/v1",
+    `locked=${allowedBases.join(",")} default=${gatewayDefaultBase}`
+  );
+  check(
+    "浏览器拿不到任何上游直连兜底（clientDirectFallbackEnabled=false）",
+    channelConfigModule.CHANNEL_POLICY.clientDirectFallbackEnabled === false
+      && channelConfigModule.CHANNEL_POLICY.exposeUpstreamChannels === false,
+    JSON.stringify(channelConfigModule.CHANNEL_POLICY)
+  );
+}
+
+// ------------------------------------- 响应解析：Origin 线路结果仍走原有图片回传链路
+// 中转站对 Origin 线路的返回与其它线路同形状，仍然由 extractImagesFromResponse 解析，
+// 再交给前端共用的图片地址判定（image-hosts.js）与结果卡片渲染，链路不做分叉。
+{
+  const relayPayload = { data: [{ url: "https://api.jingyin.online/v1/images/generated/origin-banana2.png" }] };
+  const parsed = channelModule.extractImagesFromResponse(relayPayload);
+  check(
+    "中转站返回的 Origin 结果能被 extractImagesFromResponse 解析",
+    parsed.length === 1 && parsed[0].type === "url",
+    JSON.stringify(parsed)
+  );
+  const b64Payload = { data: [{ b64_json: "aGVsbG8=" }] };
+  check(
+    "b64_json 形态的结果同样能进入回传链路",
+    channelModule.extractImagesFromResponse(b64Payload)[0]?.type === "b64_json"
+  );
+  const hosts = await import(new URL("../../src/shared/image-hosts.js", import.meta.url));
+  check(
+    "解析出的结果地址通过前端共用的图片回传判定",
+    hosts.classifyImageSource(String(parsed[0]?.value || "")).allowed === true,
+    JSON.stringify(hosts.classifyImageSource(String(parsed[0]?.value || "")))
+  );
+  const relayResponseContract = channelModule.summarizeResponse(relayPayload);
+  check(
+    "回传链路仍按现有响应形状统计（data 数量 / image 数量）",
+    relayResponseContract.dataCount === 1 && relayResponseContract.imageCount === 1,
+    JSON.stringify(relayResponseContract)
+  );
 }
 
 console.log(lines.join("\n"));

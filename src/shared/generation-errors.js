@@ -157,7 +157,7 @@ export function classifyGenerationError(error, context = {}) {
     kind = GENERATION_ERROR_KINDS.QUOTA;
   } else if (status === 413 || status === 415 || match([/image too large/, /payload too large/, /max\s*(?:2|4|10)\s*mb/, /(?:2|4|10)\s*mb/i, /unsupported media type/, /格式不支持/, /文件过大/, /图片过大/])) {
     kind = GENERATION_ERROR_KINDS.UPLOAD_REJECTED;
-  } else if (match([/manual_channel_required/, /manual_channel_not_found/, /channel_not_found/, /route_not_found/, /no available channel/, /dispatch_mode/, /模型不存在/, /model not found/, /model_not_found/, /线路未生效/, /渠道不可用/])) {
+  } else if (match([/manual_channel_required/, /manual_channel_not_found/, /channel_not_found/, /channel_not_available/, /manual_dispatch_required/, /route_not_found/, /no available channel/, /dispatch_mode/, /模型不存在/, /model not found/, /model_not_found/, /线路未生效/, /渠道不可用/, /只支持手动选线/, /线路[^，。；]{0,16}(不存在|未开通|未接入|未配置)/])) {
     kind = GENERATION_ERROR_KINDS.CHANNEL_UNAVAILABLE;
   } else if (status === 400 || status === 404 || status === 422 || match([/invalid_request/, /invalid parameter/, /unsupported/, /不支持/, /参数/, /aspect/, /size.*not.*support/])) {
     kind = GENERATION_ERROR_KINDS.INVALID_REQUEST;

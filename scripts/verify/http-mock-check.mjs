@@ -102,6 +102,22 @@ check(
   modelIds.join(",")
 );
 check(
+  "routing catalog 的模型顺序 = 2.0 → 2.5 → 香蕉 2 → 香蕉 Pro",
+  JSON.stringify(modelIds) === JSON.stringify(["tt-image-2", "tt-image-2.5", "banana-2", "nano-banana-pro"]),
+  modelIds.join(",")
+);
+for (const [modelId, originId, originLabel] of [
+  ["tt-image-2", "silent-tt2-line-11", "Origin"],
+  ["tt-image-2.5", "silent-tt25-line-06", "Origin"]
+]) {
+  const rows = (routing.channels || []).filter((channel) => (channel.supportedModels || []).includes(modelId));
+  check(
+    `${modelId} 目录里 Origin 排第一位`,
+    rows[0]?.id === originId && rows[0]?.label === originLabel,
+    rows.slice(0, 3).map((channel) => `${channel.id}/${channel.label}`).join(",")
+  );
+}
+check(
   "routing catalog 不含旧模型 ID nano-banana2 / gpt-image",
   !JSON.stringify(routing).includes("nano-banana2") && !JSON.stringify(routing).includes("gpt-image")
 );
@@ -123,15 +139,22 @@ for (const token of ["WD-banana pro-特价", "MC-限时特惠", "XBS-default", "
 const configText = JSON.stringify(config.payload?.models || []);
 check("config.models 输出不含旧线路名", !/WD-banana pro-特价|MC-限时特惠|XBS-default/.test(configText));
 
-const bananaChannels = (routing.channels || [])
-  .filter((channel) => (channel.supportedModels || []).includes("banana-2"))
-  .map((channel) => channel.id);
+const bananaChannelRows = (routing.channels || [])
+  .filter((channel) => (channel.supportedModels || []).includes("banana-2"));
+const bananaChannels = bananaChannelRows.map((channel) => channel.id);
 check(
-  "香蕉 2 目录里只有两条线路",
-  bananaChannels.length === 2
-    && bananaChannels.includes("silent-banana-line-08")
-    && bananaChannels.includes("silent-banana-line-07"),
+  "香蕉 2 目录里只有三条线路（Subdirect → 云枢 → Origin）",
+  bananaChannels.length === 3
+    && bananaChannels[0] === "silent-banana-line-08"
+    && bananaChannels[1] === "silent-banana-line-07"
+    && bananaChannels[2] === "silent-banana-line-09",
   bananaChannels.join(",")
+);
+check(
+  "香蕉 2 三条线路价格都是 0.12（Origin 也在 $0.12 档）",
+  bananaChannelRows.length === 3
+    && bananaChannelRows.every((channel) => Number(channel.pricing?.["banana-2"]?.price ?? -1) === 0.12),
+  JSON.stringify(bananaChannelRows.map((channel) => [channel.id, channel.pricing?.["banana-2"]?.price]))
 );
 
 const proChannels = (routing.channels || [])
@@ -175,6 +198,22 @@ for (const [id, label] of [["silent-tt25-line-01", "XT-image2-s"], ["silent-tt25
     frontendRows.map((channel) => channel.label).join(","));
   check("前端菜单剩余 7 条（2.0 服务端 10 条 - 隐藏 3 条）",
     frontendRows.length === 7, `count=${frontendRows.length}`);
+  check("2.0 前端菜单第一条是 Origin（隐藏 ZYG 不影响 Origin 优先）",
+    frontendRows[0]?.id === "silent-tt2-line-11" && frontendRows[0]?.label === "Origin",
+    frontendRows.slice(0, 3).map((channel) => channel.label).join(","));
+
+  // 2026-09-26（按用户要求）：香蕉 2 的「云枢」也改成前端隐藏，只在前端隐藏，服务端照旧认。
+  const bananaFrontend = routingModule.channelsForModel("banana-2", routing);
+  check("香蕉 2 前端菜单 = Subdirect → Origin（云枢已隐藏）",
+    bananaFrontend.length === 2
+      && bananaFrontend[0].id === "silent-banana-line-08"
+      && bananaFrontend[1].id === "silent-banana-line-09",
+    bananaFrontend.map((channel) => `${channel.id}/${channel.label}`).join(","));
+  check("香蕉 2 云枢是前端隐藏而不是下架（服务端目录仍在、服务端仍接受）",
+    routingModule.isHiddenChannelId("silent-banana-line-07")
+      && !routingModule.isForbiddenChannelId("silent-banana-line-07")
+      && (routing.channels || []).some((channel) => channel.id === "silent-banana-line-07"),
+    "isHidden=true / isForbidden=false / 目录仍在");
 }
 
 // ------------------------------------------------- /api/images：旧 channelId 必须被拒
@@ -279,6 +318,145 @@ for (const [channelId, label] of [["silent-tt25-line-01", "XT-image2-s"], ["sile
   check(
     "/api/images 合法线路 + 无 KEY -> missing_api_key（证明未触发上游）",
     result.status === 400 && result.payload?.error === "missing_api_key",
+    `status=${result.status} error=${result.payload?.error}`
+  );
+}
+
+// ------------------- 本轮新增：Origin 香蕉 2 线路（silent-banana-line-09）
+// 快捷生成链路：合法线路 + 无 KEY -> missing_api_key，证明 Origin 线路通过了
+// normalize -> validateImageRouting -> validateImageCapabilities，且没有触发上游生图。
+{
+  const form = new FormData();
+  form.set("model", "banana-2");
+  form.set("channelId", "silent-banana-line-09");
+  form.set("dispatchMode", "manual");
+  form.set("prompt", "mock 检查，Origin 线路，不带 KEY，不会调用上游");
+  form.set("imageSize", "2K");
+  form.set("aspectRatio", "3:4");
+  form.append("image", tinyPng("mock.png"), "mock.png");
+  const result = await json("/api/images", { method: "POST", body: form });
+  check(
+    "/api/images 接受 Origin 线路 banana-2 + silent-banana-line-09（停在 missing_api_key）",
+    result.status === 400 && result.payload?.error === "missing_api_key",
+    `status=${result.status} error=${result.payload?.error}`
+  );
+}
+
+// 跨模型：Origin 的香蕉 2 channelId 用在别的模型上必须被拒（channel_model_mismatch）。
+for (const otherModel of ["nano-banana-pro", "tt-image-2"]) {
+  const form = new FormData();
+  form.set("model", otherModel);
+  form.set("channelId", "silent-banana-line-09");
+  form.set("dispatchMode", "manual");
+  form.set("prompt", "mock 检查");
+  form.set("imageSize", "2K");
+  form.set("aspectRatio", "3:4");
+  form.append("image", tinyPng("mock.png"), "mock.png");
+  const result = await json("/api/images", { method: "POST", body: form });
+  check(
+    `/api/images 拒绝 Origin 香蕉 2 线路用于 ${otherModel}`,
+    result.status === 400 && result.payload?.error === "channel_model_mismatch",
+    `status=${result.status} error=${result.payload?.error}`
+  );
+}
+
+// 反向：banana-2 蹭香蕉 Pro 的 Origin 线路也必须被拒。
+{
+  const form = new FormData();
+  form.set("model", "banana-2");
+  form.set("channelId", "silent-pro-line-09");
+  form.set("dispatchMode", "manual");
+  form.set("prompt", "mock 检查");
+  form.set("imageSize", "2K");
+  form.set("aspectRatio", "3:4");
+  form.append("image", tinyPng("mock.png"), "mock.png");
+  const result = await json("/api/images", { method: "POST", body: form });
+  check(
+    "/api/images 拒绝 banana-2 使用 Pro 的 Origin 线路 silent-pro-line-09",
+    result.status === 400 && result.payload?.error === "channel_model_mismatch",
+    `status=${result.status} error=${result.payload?.error}`
+  );
+}
+
+// ------------------- 批量换装链路：Origin 线路同样要在智能介入之前通过路由校验
+// 这批请求都带假 KEY（服务端 API Key 存在性检查在最前面），并且故意塞一张超过
+// banana-2 上限（16MB）的图：错误码是 image_too_large 就说明**路由已经放行**
+// （否则会是 forbidden_channel / channel_model_mismatch）。全程没有上游请求。
+{
+  const oversized = new File([new Uint8Array(17 * 1024 * 1024)], "oversized.png", { type: "image/png" });
+  const payload = {
+    taskId: `mock-outfit-origin-${Date.now()}`,
+    apiKey: "sk-mock-key-not-real",
+    model: "banana-2",
+    channelId: "silent-banana-line-09",
+    dispatchMode: "manual",
+    imageSize: "2K",
+    aspectRatio: "3:4",
+    prompt: "mock 批量换装检查，不会调用上游",
+    workflowMode: "outfit",
+    smartIntervention: false
+  };
+  const form = new FormData();
+  form.set("payload", JSON.stringify(payload));
+  form.append("image", tinyPng("model.png"), "model.png");
+  form.append("image", oversized, "oversized.png");
+  const result = await json("/api/generate-outfit", { method: "POST", body: form });
+  check(
+    "/api/generate-outfit 放行 Origin 线路 silent-banana-line-09 的路由校验（停在 image_too_large）",
+    result.status === 400 && result.payload?.error === "image_too_large",
+    `status=${result.status} error=${result.payload?.error}`
+  );
+}
+
+// 对照：同样一张超大图 + 非法线路，必须在路由阶段就被拒（证明上一条不是被图片大小挡住的假阳性）。
+{
+  const oversized = new File([new Uint8Array(17 * 1024 * 1024)], "oversized.png", { type: "image/png" });
+  const payload = {
+    taskId: `mock-outfit-origin-bad-${Date.now()}`,
+    apiKey: "sk-mock-key-not-real",
+    model: "banana-2",
+    channelId: "XBS-default",
+    dispatchMode: "manual",
+    imageSize: "2K",
+    aspectRatio: "3:4",
+    prompt: "mock 批量换装对照检查，不会调用上游",
+    workflowMode: "outfit",
+    smartIntervention: false
+  };
+  const form = new FormData();
+  form.set("payload", JSON.stringify(payload));
+  form.append("image", tinyPng("model.png"), "model.png");
+  form.append("image", oversized, "oversized.png");
+  const result = await json("/api/generate-outfit", { method: "POST", body: form });
+  check(
+    "/api/generate-outfit 对照组（同图 + 旧线路）先报 forbidden_channel",
+    result.status === 400 && result.payload?.error === "forbidden_channel",
+    `status=${result.status} error=${result.payload?.error}`
+  );
+}
+
+// 批量换装：Origin 香蕉 2 channelId 用在 Pro 上必须被拒（跨模型组合不允许）。
+{
+  const payload = {
+    taskId: `mock-outfit-cross-${Date.now()}`,
+    apiKey: "sk-mock-key-not-real",
+    model: "nano-banana-pro",
+    channelId: "silent-banana-line-09",
+    dispatchMode: "manual",
+    imageSize: "2K",
+    aspectRatio: "3:4",
+    prompt: "mock 批量换装跨模型检查，不会调用上游",
+    workflowMode: "outfit",
+    smartIntervention: false
+  };
+  const form = new FormData();
+  form.set("payload", JSON.stringify(payload));
+  form.append("image", tinyPng("model.png"), "model.png");
+  form.append("image", tinyPng("clothing.png"), "clothing.png");
+  const result = await json("/api/generate-outfit", { method: "POST", body: form });
+  check(
+    "/api/generate-outfit 拒绝 Pro 使用 Origin 香蕉 2 线路",
+    result.status === 400 && result.payload?.error === "channel_model_mismatch",
     `status=${result.status} error=${result.payload?.error}`
   );
 }

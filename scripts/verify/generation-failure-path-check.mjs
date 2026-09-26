@@ -15,7 +15,7 @@
 // 用法：node scripts/verify/generation-failure-path-check.mjs
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { freshSandbox, removeTreeSync } from "./lib/sandbox.mjs";
 import path from "node:path";
 import process from "node:process";
@@ -50,6 +50,20 @@ const mock = http.createServer((req, res) => {
     if (mode === "bad-url") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ created: Math.floor(Date.now() / 1000), data: [{ url: "https://img.invalid.localhost.test/does-not-exist.png" }] }));
+      return;
+    }
+    // 2026-09-26 真实事故形状：中转站按请求体 channelId 手动选线，但这条线路在
+    // 适配器里没登记 → HTTP 400 + manual_channel_not_found（真实事故里 2.36 秒就返回）。
+    if (mode === "manual-channel-missing") {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "manual_channel_not_found", type: "new_api_error" } }));
+      return;
+    }
+    // 2026-09-26：线路声明 strictManualDispatch，客户端带 channelId 但 dispatchMode 不是
+    // manual 时中转站返回 400 manual_dispatch_required（防止静默改走其它线路）。
+    if (mode === "manual-dispatch-required") {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "manual_dispatch_required", type: "new_api_error" } }));
       return;
     }
     const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -189,6 +203,67 @@ try {
     check("超时：分类为请求超时", /请求超时/.test(text), text);
   }
 
+  // f) 2026-09-26 事故回归：中转站没有这条线路（400 manual_channel_not_found）
+  //    必须报"线路未开通"，不能包装成 504「生成超时，请重新生成。」
+  //    （真实事故：15:58:56 批量换装选 banana-2 的 Origin 线路，上游 2.36 秒就返回这个错，
+  //      界面却显示"生成超时"，用户只会一直重试。）
+  mode = "manual-channel-missing";
+  const missingLine = await callImages();
+  check("线路未开通：响应返回且 loading 能结束", frontendSettles(missingLine), `http=${missingLine.httpStatus} ms=${missingLine.ms}`);
+  check("线路未开通：不自动重试（上游只被请求 1 次）", missingLine.upstreamCount === 1, `upstream=${missingLine.upstreamCount}`);
+  check("线路未开通：HTTP 状态是 400（不再是 504）", missingLine.httpStatus === 400, `http=${missingLine.httpStatus}`);
+  check("线路未开通：error=channel_not_available（不再是 channel_timeout）",
+    missingLine.body?.error === "channel_not_available", String(missingLine.body?.error));
+  check("线路未开通：文案明确说「尚未开通」，不出现「超时」",
+    /尚未开通/.test(String(missingLine.body?.message || "")) && !/超时/.test(String(missingLine.body?.message || "")),
+    String(missingLine.body?.message || ""));
+  {
+    const ctx = { status: missingLine.httpStatus, message: missingLine.body?.message || "", payloadError: missingLine.body?.error || "" };
+    const info = classifyGenerationError(null, ctx);
+    const text = formatGenerationError(null, ctx);
+    check("线路未开通：前端分类为模型或渠道不可用（不是请求超时）",
+      info.kind === GENERATION_ERROR_KINDS.CHANNEL_UNAVAILABLE, `${info.kind} / ${text}`);
+  }
+
+  // g) 2026-09-26：线路只允许手动选线（400 manual_dispatch_required）
+  mode = "manual-dispatch-required";
+  const strictManual = await callImages();
+  check("只允许手动选线：响应返回且 loading 能结束", frontendSettles(strictManual), `http=${strictManual.httpStatus} ms=${strictManual.ms}`);
+  check("只允许手动选线：不自动重试（上游只被请求 1 次）", strictManual.upstreamCount === 1, `upstream=${strictManual.upstreamCount}`);
+  check("只允许手动选线：HTTP 状态是 400", strictManual.httpStatus === 400, `http=${strictManual.httpStatus}`);
+  check("只允许手动选线：error=manual_dispatch_required",
+    strictManual.body?.error === "manual_dispatch_required", String(strictManual.body?.error));
+  check("只允许手动选线：文案说明只支持手动选线",
+    /手动选线/.test(String(strictManual.body?.message || "")), String(strictManual.body?.message || ""));
+  {
+    const ctx = { status: strictManual.httpStatus, message: strictManual.body?.message || "", payloadError: strictManual.body?.error || "" };
+    check("只允许手动选线：前端分类为模型或渠道不可用",
+      classifyGenerationError(null, ctx).kind === GENERATION_ERROR_KINDS.CHANNEL_UNAVAILABLE,
+      classifyGenerationError(null, ctx).kind);
+  }
+
+  // h) 日志可诊断性：每条真的发往中转站的请求，日志里必须能看出是哪条线路。
+  //    2026-09-26 事故里正因为缺 requestedChannelId，只能靠"全库唯一一次错误码"反推用户选的是哪条线路。
+  {
+    const logPath = path.join(SANDBOX_ROOT, "logs", "generation.jsonl");
+    check("生图日志文件已生成", existsSync(logPath), logPath);
+    const rows = existsSync(logPath)
+      ? readFileSync(logPath, "utf8").split("\n").filter(Boolean).map((line) => {
+        try { return JSON.parse(line); } catch { return null; }
+      }).filter(Boolean)
+      : [];
+    const forwards = rows.filter((row) => String(row.stage || "").startsWith("forward-"));
+    check("有发往中转站的转发日志", forwards.length > 0, `forward 记录 ${forwards.length} 条`);
+    const withChannel = forwards.filter((row) => typeof row.requestedChannelId === "string" && row.requestedChannelId);
+    check("转发日志带 requestedModel + requestedChannelId",
+      withChannel.length > 0
+        && withChannel.every((row) => row.requestedModel === "banana-2")
+        && withChannel.some((row) => row.requestedChannelId === "silent-banana-line-08"),
+      `带 channelId 的 ${withChannel.length}/${forwards.length}；样例=${JSON.stringify(withChannel[0] ? { requestedModel: withChannel[0].requestedModel, requestedChannelId: withChannel[0].requestedChannelId } : null)}`);
+    const secretLeak = rows.some((row) => /sk-[A-Za-z0-9_-]{8,}/.test(JSON.stringify(row)));
+    check("生图日志里没有密钥字面量", secretLeak === false, secretLeak ? "发现 sk- 字面量" : "0 命中");
+  }
+
   results.push({
     name: "SAMPLE",
     pass: true,
@@ -199,7 +274,8 @@ try {
         noImage: noImage.body,
         badUrl: { httpStatus: badUrl.httpStatus, images: badUrl.images },
         refused: refused.body,
-        timeout: timeoutRun.body
+        timeout: timeoutRun.body,
+        missingLine: missingLine.body
       }
     })
   });
