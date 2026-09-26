@@ -1,4 +1,7 @@
-// 批量生成「SKILL / 服装规则默认关闭」验证（本地 mock 上游，不联网、不扣费、不出图）。
+// 批量生成「提示词只发用户原话」验证（本地 mock 上游，不联网、不扣费、不出图）。
+//
+// 2026-09-26：SKILL / 图1图2 规则已整体删除，"换装规则"开关也不存在了。
+// 因此现在的契约是**无条件的**：无论请求里带不带旧字段，最终 prompt 都只有用户文字。
 //
 // 为什么要在 HTTP 层验证：
 //   只在单测里调 buildOutfitPrompt 只能证明函数本身；这里让 V11 真的收一次
@@ -6,12 +9,12 @@
 //   证明「服务端真正发给模型的提示词」不含任何自动规则，且用户原始提示词原样保留。
 //
 // 覆盖：
-//   1. 不带 batchSkillRules（= 前端默认关闭）→ 最终 prompt 只有用户文字
+//   1. 不带旧字段（现在的正常请求）→ 最终 prompt 只有用户文字
 //   2. 显式 batchSkillRules=false → 同上
-//   3. 显式 batchSkillRules=true → 规则回来（证明规则常量没有被删除，可恢复）
+//   3. 显式 batchSkillRules=true（旧字段）→ **依然**只有用户文字（规则已删除、字段被忽略）
 //   4. 三种情况都不改 model / channelId / dispatchMode / imageSize / aspectRatio
 //
-// 用法：node scripts/verify/batch-skill-check.mjs
+// 用法：node scripts/verify/batch-prompt-passthrough-check.mjs
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -23,11 +26,11 @@ const ROOT = process.cwd();
 const NODE = path.join(ROOT, "runtime", "node", "node.exe");
 const MOCK_PORT = 8893;
 const APP_PORT = 8794;
-const SANDBOX_ROOT = path.join(ROOT, ".codex-artifacts", "batch-skill-check");
+const SANDBOX_ROOT = path.join(ROOT, ".codex-artifacts", "batch-prompt-passthrough-check");
 
 // 用户自己写的提示词：必须逐字保留。
 const USER_PROMPT = "把图2的连衣裙穿到图1模特身上，保持模特姿势。";
-// 只有 SKILL 打开时才会出现的规则块标题（来自 prompts/server/outfit-skill.js）。
+// 旧 SKILL 规则块标题（来自已删除的 prompts/server/outfit-skill.js 规则段）：现在必须永远不出现。
 const RULE_MARKERS = [
   "【批量生成换装 Skill】",
   "【图2迁移范围】",
@@ -119,7 +122,7 @@ function tinyPng(name) {
 /** 调一次 /api/generate-outfit，返回 {status, body, upstream}。 */
 async function callGenerateOutfit({ batchSkillRules }) {
   const payload = {
-    taskId: `batch-skill-${batchSkillRules === undefined ? "default" : batchSkillRules}`,
+    taskId: `batch-passthrough-${batchSkillRules === undefined ? "default" : batchSkillRules}`,
     apiKey: "sk-mock-not-real",
     model: "banana-2",
     channelId: "silent-banana-line-08",
@@ -189,29 +192,33 @@ try {
   });
   if (!(await waitForHealth(APP_PORT))) throw new Error("V11 测试实例未起来");
 
-  // ---- 1) 默认（前端本轮默认关闭）
+  // ---- 1) 正常请求（不带旧字段）
   const defaultRun = await callGenerateOutfit({});
   const defaultPrompt = defaultRun.upstream?.prompt || "";
   const defaultHits = ruleHits(defaultPrompt);
-  check("默认（不传 batchSkillRules）请求真的发出去了", defaultRun.upstreamCount === 1 && defaultRun.status === 200, `status=${defaultRun.status} ups=${defaultRun.upstreamCount} msg=${defaultRun.message}`);
-  check("默认：最终 prompt 完全等于用户提示词", defaultPrompt.trim() === USER_PROMPT, `prompt=${JSON.stringify(defaultPrompt.slice(0, 120))}`);
-  check("默认：不含任何自动规则块标题", defaultHits.markers.length === 0, `命中=${defaultHits.markers.join("|")}`);
-  check("默认：不含任何服装规则正文", defaultHits.keywords.length === 0, `命中=${defaultHits.keywords.join("|")}`);
+  check("正常请求真的发出去了", defaultRun.upstreamCount === 1 && defaultRun.status === 200, `status=${defaultRun.status} ups=${defaultRun.upstreamCount} msg=${defaultRun.message}`);
+  check("正常请求：最终 prompt 完全等于用户提示词", defaultPrompt.trim() === USER_PROMPT, `prompt=${JSON.stringify(defaultPrompt.slice(0, 120))}`);
+  check("正常请求：不含任何自动规则块标题", defaultHits.markers.length === 0, `命中=${defaultHits.markers.join("|")}`);
+  check("正常请求：不含任何服装规则正文", defaultHits.keywords.length === 0, `命中=${defaultHits.keywords.join("|")}`);
 
-  // ---- 2) 显式关闭
+  // ---- 2) 旧字段 false
   const offRun = await callGenerateOutfit({ batchSkillRules: false });
   const offPrompt = offRun.upstream?.prompt || "";
   const offHits = ruleHits(offPrompt);
-  check("显式 false：最终 prompt 完全等于用户提示词", offPrompt.trim() === USER_PROMPT, `prompt=${JSON.stringify(offPrompt.slice(0, 120))}`);
-  check("显式 false：不含任何自动规则", offHits.markers.length === 0 && offHits.keywords.length === 0, `markers=${offHits.markers.join("|")} keywords=${offHits.keywords.join("|")}`);
+  check("旧字段 false：最终 prompt 完全等于用户提示词", offPrompt.trim() === USER_PROMPT, `prompt=${JSON.stringify(offPrompt.slice(0, 120))}`);
+  check("旧字段 false：不含任何自动规则", offHits.markers.length === 0 && offHits.keywords.length === 0, `markers=${offHits.markers.join("|")} keywords=${offHits.keywords.join("|")}`);
 
-  // ---- 3) 显式打开（证明规则还在、可恢复）
+  // ---- 3) 旧字段 true：规则已删除，必须**没有任何效果**
   const onRun = await callGenerateOutfit({ batchSkillRules: true });
   const onPrompt = onRun.upstream?.prompt || "";
   const onHits = ruleHits(onPrompt);
-  check("显式 true：规则块回来了（常量未删除、可恢复）", onHits.markers.length > 0 && onHits.keywords.length > 0, `markers=${onHits.markers.join("|")}`);
-  check("显式 true：用户原始提示词仍然包含在最终 prompt 里", onPrompt.includes(USER_PROMPT), `len=${onPrompt.length}`);
-  check("显式 true：最终 prompt 明显长于关闭时", onPrompt.length > offPrompt.length + 200, `on=${onPrompt.length} off=${offPrompt.length}`);
+  check("旧字段 true：规则不会回来（SKILL 已删除，字段被忽略）",
+    onHits.markers.length === 0 && onHits.keywords.length === 0,
+    `markers=${onHits.markers.join("|")} keywords=${onHits.keywords.join("|")}`);
+  check("旧字段 true：最终 prompt 仍然完全等于用户提示词", onPrompt.trim() === USER_PROMPT, `prompt=${JSON.stringify(onPrompt.slice(0, 120))}`);
+  check("旧字段 true 与不传字段时最终 prompt 一字不差",
+    onPrompt === defaultPrompt && onPrompt === offPrompt,
+    `default=${defaultPrompt.length} off=${offPrompt.length} on=${onPrompt.length}`);
 
   // ---- 4) 其它请求字段不受影响
   const fieldsOf = (up) => {
@@ -230,7 +237,7 @@ try {
   const f1 = fieldsOf(offRun.upstream);
   const f2 = fieldsOf(onRun.upstream);
   check(
-    "开关不影响 model / channelId / dispatchMode / imageSize / aspectRatio",
+    "三种请求的 model / channelId / dispatchMode / imageSize / aspectRatio 完全一致",
     f0.model === f1.model && f1.model === f2.model
       && f0.channelId === "silent-banana-line-08" && f1.channelId === f0.channelId && f2.channelId === f0.channelId
       && f0.dispatchMode === "manual" && f1.dispatchMode === "manual" && f2.dispatchMode === "manual"

@@ -8,7 +8,7 @@
 | 搜索词 | `DEFAULT_WHITE_REFINE_PAGE_NAME`、`WHITE_REFINE_DEFAULT_PROMPT`、`isWhiteRefineWorkflow` |
 | 前端 API | `src/api/outfit.js` 的 `generateOutfit()` |
 | 本地接口 | `/api/generate-outfit` |
-| 后端 SKILL | `prompts/server/outfit-skill.js` |
+| 后端提示词出口 | `prompts/server/outfit-skill.js`（2026-09-26 起 = 只发用户原话，SKILL/规则已删除） |
 
 这个分区重点是白底、平铺/挂拍精修、去衣架等，不应引入换装配对逻辑。
 
@@ -19,4 +19,6 @@
 - 道具清理：衣架、挂钩、夹子、图钉、别针、固定针、支撑物都要去掉，并用同一件衣服附近纹理自然补齐。
 - 褶皱整理：去运输压痕、固定造成的尖锐折痕和多余皱团，但保留结构褶、自然垂感和面料纹理。
 
-改默认提示词优先看 `src/outfit-workflow.jsx` 的 `WHITE_REFINE_DEFAULT_PROMPT`；改最终发给模型的硬规则看 `prompts/server/outfit-skill.js` 的 `buildWhiteRefinePrompt()`。
+上面这些约束以前由后端 SKILL（`buildWhiteRefinePrompt()`）追加；**2026-09-26 起后端只发用户原话**，
+所以它们现在只作为"默认提示词"的内容存在：改默认词看 `src/outfit-workflow.jsx` 的 `WHITE_REFINE_DEFAULT_PROMPT`，
+或在提示词里自己写清楚。

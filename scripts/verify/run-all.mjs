@@ -43,7 +43,7 @@ const ORDER = [
   "resize-long-edge-check",
   "generation-error-check",
   "reference-gate-check",
-  "batch-skill-check",
+  "batch-prompt-passthrough-check",
   "connection-test-check",
   "http-mock-check",
   "generation-failure-path-check",
@@ -53,7 +53,7 @@ const ORDER = [
   "routing-check",
   "ui-duplication-check",
   "modal-shell-check",
-  "quickgen-skill-check",
+  "quickgen-prompt-passthrough-check",
   "lint-ratchet-check",
   "run-all-check",
   "check-launcher"

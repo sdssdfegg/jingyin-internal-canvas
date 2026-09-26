@@ -52,27 +52,29 @@ check("快捷生成悬浮框内没有第二套清空图片按钮", countIn(quick
 check("快捷生成悬浮框内没有第二套优化提示词按钮", countIn(quickgenSection, "<span>优化提示词</span>") === 0);
 check("快捷生成悬浮框内没有第二套词按钮", countIn(quickgenSection, "<span>词</span>") === 0);
 
-// 4) SKILL 开关存在、默认开启、状态持久化
+// 4) 2026-09-26：SKILL / 换装开关已按用户要求删除（快捷 + 批量都不再有任何 SKILL 开关）
 const settingsStateStart = mainJsx.indexOf("const defaultState = {");
 const settingsStateEnd = mainJsx.indexOf("};", settingsStateStart);
 const defaultStateBlock = mainJsx.slice(settingsStateStart, settingsStateEnd);
-check("defaultState 里 skillRulesEnabled 默认 true", /skillRulesEnabled:\s*true/.test(defaultStateBlock));
-check("快捷悬浮框里有 SKILL 开关按钮", footer.includes('className={`skillToggleButton'));
-// 2026-09-25：按钮文案由「快捷生成规则 / SKILL」改为「换装」（开关状态与持久化行为不变）。
-check("快捷悬浮框开关文案为「换装」", footer.includes("<span>换装</span>"));
-check("旧的「快捷生成规则 / SKILL」文案已不存在", !footer.includes("快捷生成规则 / SKILL"));
+check("defaultState 里不再有 skillRulesEnabled", !defaultStateBlock.includes("skillRulesEnabled"));
+check("快捷悬浮框里不再有 SKILL / 换装开关按钮", !footer.includes("skillToggleButton"));
+check("快捷悬浮框里不再有「换装」开关文案", !footer.includes("<span>换装</span>"));
+check("main.jsx 里不再出现 skillRulesEnabled", !mainJsx.includes("skillRulesEnabled"));
 
 const storageEffect = mainJsx.slice(mainJsx.indexOf("writeJsonStorage(STORAGE_KEY, settings)") - 400, mainJsx.indexOf("writeJsonStorage(STORAGE_KEY, settings)") + 200);
 check("settings 会写回本地存档（状态持久化）", storageEffect.includes("writeJsonStorage(STORAGE_KEY, settings)"));
-check("loadState 归一化 skillRulesEnabled", /merged\.skillRulesEnabled\s*=\s*merged\.skillRulesEnabled\s*!==\s*false/.test(mainJsx));
 
 // 5) 底层能力函数没有被删除
 for (const fn of ["function optimizePrompt", "setIsPromptAssistantOpen", "setFiles([])"]) {
   check(`底层能力仍在：${fn}`, mainJsx.includes(fn));
 }
 
-// 6) 规则常量搬到了独立模块，且 main.jsx 不再重复定义
+// 6) 2026-09-26：SKILL 规则块已整体删除，只保留"用户原话"出口 + 局部意图判定
 const rulesModule = readFileSync(path.join(root, "src", "shared", "quickgen-prompt-rules.js"), "utf8");
+check("共享模块只导出「提示词出口 + 局部意图判定」",
+  rulesModule.includes("export function promptForQuickGeneration(prompt)")
+    && rulesModule.includes("export function classifyQuickPrimaryLocalIntent(prompt)"),
+  "quickgen-prompt-rules.js");
 for (const constantName of [
   "QUICK_LOCAL_EDIT_PROMPT_SUFFIX",
   "QUICK_LOCAL_EDIT_CONTEXT_PROMPT_SUFFIX",
@@ -82,11 +84,15 @@ for (const constantName of [
   "QUICK_WHOLE_OUTFIT_PROMPT_SUFFIX",
   "QUICK_GPT_LOCAL_ANCHOR_PROMPT_SUFFIX",
   "QUICK_BANANA_LOCAL_ANCHOR_PROMPT_SUFFIX",
-  "QUICK_BANANA2_LOCAL_ANCHOR_PROMPT_SUFFIX"
+  "QUICK_BANANA2_LOCAL_ANCHOR_PROMPT_SUFFIX",
+  "QUICK_SKILL_RULE_BLOCKS"
 ]) {
-  check(`规则常量保留在共享模块：${constantName}`, rulesModule.includes(`export const ${constantName}`));
-  check(`main.jsx 不再重复定义：${constantName}`, !mainJsx.includes(`const ${constantName} =`));
+  check(`规则块常量已删除：${constantName}`, !rulesModule.includes(constantName));
+  check(`main.jsx 也不再定义：${constantName}`, !mainJsx.includes(`const ${constantName} =`));
 }
+check("提示词出口就是用户原话（不再拼接任何后缀）",
+  /export function promptForQuickGeneration\(prompt\) \{\s*return String\(prompt \|\| ""\)\.trim\(\);\s*\}/.test(rulesModule),
+  "无后缀拼接");
 
 // 7) 2026-09-25 UI 调整：悬浮框里这四类重复入口必须消失
 check("悬浮框不再有「图片生成」页签 JSX", !/className="modeTab active"[\s\S]{0,80}图片生成/.test(quickgenSection));
@@ -107,11 +113,10 @@ check("悬浮框有 min-width", /min-width:\s*\d+px/.test(composerBlock), (compo
 check("悬浮框有 min-height", /min-height:\s*\d+px/.test(composerBlock), (composerBlock.match(/min-height:[^;]+/) || [""])[0]);
 check("悬浮框不再直接吃全局 --shadow（深色厚阴影）", !/box-shadow:\s*var\(--shadow\)/.test(composerBlock), (composerBlock.match(/box-shadow:[^;]+/) || [""])[0]);
 
-// 9) SKILL 开关样式：关闭灰、开启绿（与批量页「智能文本」同色 #49c85b）
-check("SKILL 开关有 .on 轨道绿色规则", /\.skillToggleButton\.on > i \{[\s\S]*?#49c85b/.test(cssText));
-check("SKILL 开关关闭态为灰色轨道", /\.skillToggleButton > i \{[\s\S]*?background: color-mix\([^)]*var\(--muted\)/.test(cssText));
-check("SKILL 开关滑块位移 20px", /\.skillToggleButton\.on > i > b \{[\s\S]*?translateX\(20px\)/.test(cssText));
-check("SKILL 开关 JSX 用 span + i > b 结构", /className=\{`skillToggleButton[^`]*`\}[\s\S]{0,600}<i aria-hidden="true"><b \/><\/i>/.test(mainJsx));
+// 9) 2026-09-26：SKILL 开关样式已随开关一起删除
+check("styles.css 里不再有 .skillToggleButton 规则", !cssText.includes(".skillToggleButton"));
+check("批量内嵌主题里不再有 .batchSkillRulesSwitch 规则",
+  !readFileSync(path.join(root, "src", "outfit-workflow.css"), "utf8").includes(".batchSkillRulesSwitch"));
 
 // 10) 上游路由错误码必须映射成中文可读文案
 // 2026-09-25：映射逻辑（含 manual_channel_required）统一收敛到 src/shared/generation-errors.js，

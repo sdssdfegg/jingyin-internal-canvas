@@ -8,6 +8,6 @@
 | 搜索词 | `DEFAULT_LOCAL_DETAIL_PAGE_NAME`、`LOCAL_DETAIL_DEFAULT_PROMPT`、`isLocalDetailWorkflow` |
 | 前端 API | `src/api/outfit.js` 的 `generateOutfit()` |
 | 本地接口 | `/api/generate-outfit` |
-| 后端 SKILL | `prompts/server/outfit-skill.js` |
+| 后端提示词出口 | `prompts/server/outfit-skill.js`（2026-09-26 起 = 只发用户原话，SKILL/规则已删除） |
 
 局部回贴依赖蒙版和裁剪框，底层蒙版规则已经在 `src/shared/local-edit-mask.js`。改蒙版算法时要同步检查快捷生成的局部编辑。

@@ -15,7 +15,7 @@
 // 用法：node scripts/verify/image-host-allowlist-check.mjs
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { freshSandbox, removeTreeSync } from "./lib/sandbox.mjs";
 import path from "node:path";
 import process from "node:process";
@@ -275,7 +275,14 @@ try {
 
   // C4) 端到端回归（就是线上那次故障的形态）：
   //     上游返回结果图的地址在 leo.yunshuaiapi.com（非官方中转域名）→ 服务端的"显示缓存"
-  //     必须能把它下载并落成本地 /api/result/ 地址；至少不能是自己判 blocked_image_host 拦掉的。
+  //     必须**不因我们自己的闸门**而拒绝它（blocked_image_host），要么落成本地 /api/result/ 地址。
+  //
+  // 2026-09-26 修正（两条测试自身的问题）：
+  //   1. 断言原来是 `/image-proxy-blocked-host[\s\S]{0,200}leo\.yunshuaiapi\.com/` 直接扫日志文本，
+  //      会**跨行**匹配到上一条"内网目标被拦"的记录 → 假报 blockedByOwnGate=true。现在按 JSONL 逐条解析。
+  //   2. 真实 CDN 的那张图是线上抓下来的具体地址，会过期/被清理（实测已返回 404）。
+  //      "外网资源不在了"不等于"被我们的闸门拦了"，所以这里允许 404/超时等上游失败，
+  //      只要求：**失败原因不是 blocked_image_host**。
   {
     const form = new FormData();
     form.set("payload", JSON.stringify({
@@ -301,15 +308,36 @@ try {
     const res = await fetch(`http://127.0.0.1:${APP_PORT}/api/generate-outfit`, { method: "POST", body: form });
     const body = await res.json().catch(() => null);
     const localUrl = String(body?.image?.localUrl || "");
-    const assetLogFile = path.join(SANDBOX_ROOT, "logs", "asset-errors.jsonl");
-    const assetLog = existsSync(assetLogFile) ? (await import("node:fs")).readFileSync(assetLogFile, "utf8") : "";
-    const blockedByOwnGate = /image-proxy-blocked-host[\s\S]{0,200}leo\.yunshuaiapi\.com/.test(assetLog);
+
+    const readJsonl = (file) => {
+      if (!existsSync(file)) return [];
+      return readFileSync(file, "utf8")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => { try { return JSON.parse(line); } catch { return null; } })
+        .filter(Boolean);
+    };
+    const assetEntries = readJsonl(path.join(SANDBOX_ROOT, "logs", "asset-errors.jsonl"));
+    const generationEntries = readJsonl(path.join(SANDBOX_ROOT, "logs", "generation.jsonl"));
+    // 只看"针对这张 CDN 图"的拦截记录（逐条 JSON，不跨行）。
+    const blockedEntries = assetEntries.filter((entry) => entry.stage === "image-proxy-blocked-host"
+      && String(entry.url || "").includes("leo.yunshuaiapi.com"));
+    const blockedByOwnGate = blockedEntries.length > 0;
+    // 闸门本身必须是活的：内网目标那条拦截记录要在（否则"没拦"毫无意义）。
+    const privateBlocked = assetEntries.some((entry) => entry.stage === "image-proxy-blocked-host"
+      && String(entry.url || "").includes("127.0.0.1"));
+    const cacheEntry = generationEntries.find((entry) => entry.requestId === "image-host-cdn-result"
+      && entry.stage === "display-cache-outfit-result-image");
+    const cacheError = String(cacheEntry?.error || "");
+
     check("端到端：上游结果图在非官方中转域名时，不再被自己的白名单拦下",
-      body?.ok === true && blockedByOwnGate === false,
-      `ok=${body?.ok} localUrl=${localUrl} blockedByOwnGate=${blockedByOwnGate}`);
-    check("端到端：该结果图落成本地地址（/api/result/），或仅因外网不可达而未落盘",
-      /^\/api\/result\//.test(localUrl) || blockedByOwnGate === false,
-      `localUrl=${localUrl}`);
+      body?.ok === true && blockedByOwnGate === false && privateBlocked === true,
+      `ok=${body?.ok} localUrl=${localUrl} blockedByOwnGate=${blockedByOwnGate} 内网仍被拦=${privateBlocked}`);
+    check("端到端：该结果图落成本地地址，或仅是上游取图失败（404/超时），绝不是被自己拦",
+      /^\/api\/result\//.test(localUrl)
+        || (blockedByOwnGate === false && !/blocked_image_host/.test(cacheError) && Boolean(cacheEntry)),
+      `localUrl=${localUrl} cacheError=${cacheError || "(无)"}`);
   }
 } catch (error) {
   results.push({ name: "fatal", pass: false, detail: error instanceof Error ? error.message : String(error) });

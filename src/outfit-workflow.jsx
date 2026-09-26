@@ -898,10 +898,6 @@ const defaultSettings = {
   concurrency: DEFAULT_BATCH_CONCURRENCY,
   generationCount: "auto",
   smartIntervention: false,
-  // 2026-09-25 临时开关：批量生成是否自动追加 SKILL / 服装规则。
-  // 本轮默认关闭，方便用户先看模型原生效果；打开即恢复原来的批量换装规则。
-  // 服务端对应 prompts/server/outfit-skill.js 的 BATCH_SKILL_ENABLED_BY_DEFAULT。
-  batchSkillRulesEnabled: false,
   qualityCheck: false,
   garmentParts: DEFAULT_GARMENT_PARTS,
   garmentComposition: DEFAULT_GARMENT_COMPOSITION,
@@ -932,7 +928,6 @@ function readSettings() {
     if (shouldRepairOutfitPrompt(settings.prompt)) settings.prompt = OUTFIT_DEFAULT_PROMPT;
     settings.generationCount = normalizeGenerationCount(settings.generationCount);
     settings.smartIntervention = normalizeSmartIntervention(settings.smartIntervention);
-    settings.batchSkillRulesEnabled = settings.batchSkillRulesEnabled === true;
     settings.qualityCheck = normalizeQualityCheck(settings.qualityCheck);
     settings.garmentParts = normalizeGarmentParts(settings.garmentParts);
     settings.garmentComposition = normalizeGarmentComposition(settings.garmentComposition, settings.garmentParts);
@@ -1181,7 +1176,6 @@ function normalizeOutfitPageSettings(value = {}, options = {}) {
   }
   settings.generationCount = normalizeGenerationCount(settings.generationCount);
   settings.smartIntervention = normalizeSmartIntervention(settings.smartIntervention);
-  settings.batchSkillRulesEnabled = settings.batchSkillRulesEnabled === true;
   settings.qualityCheck = normalizeQualityCheck(settings.qualityCheck);
   settings.garmentParts = normalizeGarmentParts(settings.garmentParts);
   settings.garmentComposition = normalizeGarmentComposition(settings.garmentComposition, settings.garmentParts);
@@ -9297,9 +9291,6 @@ function buildTasks(countOverride = plannedGenerationCount) {
       prompt: settings.prompt,
       productNote: settings.productNote,
       smartIntervention: settings.smartIntervention,
-      // 临时开关：批量 SKILL / 服装规则。默认 false（本轮默认关闭），
-      // 关闭时服务端只回用户原始提示词，不追加任何自动规则。
-      batchSkillRules: settings.batchSkillRulesEnabled === true,
       garmentParts: taskUsesGarmentScope ? normalizeGarmentParts(task.garmentParts || settings.garmentParts) : undefined,
       garmentComposition: taskUsesGarmentScope ? normalizeGarmentComposition(task.garmentComposition || settings.garmentComposition, task.garmentParts || settings.garmentParts) : undefined,
       garmentLengths: taskWorkflowMode === "outfit" ? normalizeGarmentLengths(task.garmentLengths || settings.garmentLengths, task.garmentParts || settings.garmentParts) : undefined,
@@ -10646,16 +10637,6 @@ function buildTasks(countOverride = plannedGenerationCount) {
                   title="生成完成后调用 AI质检员标记合格/不合格"
                 >
                   <span>AI质检</span>
-                  <i aria-hidden="true"><b /></i>
-                </button>
-                <button
-                  className={`batchSkillRulesSwitch ${settings.batchSkillRulesEnabled ? "on" : ""}`}
-                  type="button"
-                  onClick={() => updateSetting("batchSkillRulesEnabled", !settings.batchSkillRulesEnabled)}
-                  aria-pressed={settings.batchSkillRulesEnabled}
-                  title="批量换装规则（临时开关）：开启时由服务端自动追加批量换装、图1/图2关系、服装类别、成衣比例/长度等规则；关闭时只发送你在提示词框里写的文字，不改模型、渠道、上传图片和其它请求字段。本轮默认关闭，方便先看模型原生效果。"
-                >
-                  <span>换装规则</span>
                   <i aria-hidden="true"><b /></i>
                 </button>
                 <button className="generateButton" type="button" onClick={() => void startBatch()} disabled={running && !canAppendWhileRunning}>

@@ -176,7 +176,6 @@ const defaultState = {
   model: "tt-image-2",
   channelId: "",
   dispatchMode: "manual",
-  skillRulesEnabled: true,
   imageSize: "2K",
   aspectRatio: "3:4",
   n: 1,
@@ -211,7 +210,6 @@ const referenceDefaults = {
   model: "tt-image-2",
   channelId: "",
   dispatchMode: "manual",
-  skillRulesEnabled: true,
   imageSize: "2K",
   aspectRatio: "3:4",
   n: 1,
@@ -247,7 +245,6 @@ const detailDefaults = {
   model: "tt-image-2",
   channelId: "",
   dispatchMode: "manual",
-  skillRulesEnabled: true,
   ratio: "9:16",
   imageSize: "2K",
   count: 10,
@@ -629,7 +626,6 @@ function loadState() {
   const merged = { ...defaultState, ...safeStored, baseUrl: defaultState.baseUrl };
   merged.model = canonicalModel(merged.model);
   merged.dispatchMode = "manual";
-  merged.skillRulesEnabled = merged.skillRulesEnabled !== false;
   return merged;
 }
 
@@ -6113,18 +6109,12 @@ function App() {
     const wholeOutfitIntent = !localEditForRun
       && runItems.length >= 2
       && classifyQuickPrimaryLocalIntent(runSettings.prompt) === "outfit";
-    const localAppearanceIntent = primaryLocalEdit && quickPrimaryLocalIntent === "appearance";
     // 2026-09-25 对齐 3.0：删除了 shouldUseExactBanana2LocalCrop 的"香蕉2 再精确重裁一次"分支。
     // 它存在的理由是当时只有香蕉2 用精确选框、其它模型用 contextRect 大图；
     // 现在所有模型上传的都是精确选框（见 cropQuickLocalEditFile），这个特殊分支已经没有意义。
     const runFiles = runItems.map((item) => quickReferenceRunUploadFile(item, localEditRunItem)).filter((file) => file instanceof File);
-    const apiPrompt = promptForQuickGeneration(runSettings.prompt, localEditForRun, runSettings.model, {
-      primaryLocalEdit,
-      localIntent: quickPrimaryLocalIntent,
-      wholeOutfit: wholeOutfitIntent,
-      // 快捷生成规则 / SKILL 临时开关：关闭时只发用户原始提示词。
-      skillRules: runSettings.skillRulesEnabled !== false
-    });
+    // 2026-09-26：SKILL 规则已整体删除 —— 发给接口的提示词就是用户输入框里的原文。
+    const apiPrompt = promptForQuickGeneration(runSettings.prompt);
     // 提示词上限来自当前模型 capabilities；超限时按目录上限截断并提示，
     // 用户输入框里的原文保持不动。
     const promptClamp = clampPromptForModel(apiPrompt, runSettings.model, config.routing || config);
@@ -6263,7 +6253,6 @@ function App() {
         // 全部停用（3.0 localPaste.ts 明确"贴回就是贴回"）。
         // 这里保留一个空对象，调用点签名不变。
         const localCompositeOptions = {};
-        void localAppearanceIntent;
         nextResults = await Promise.all(nextResults.map(async (item) => {
           const generatedBlob = await blobFromImageItem(item);
           const composedBlob = await composeQuickLocalEditBlob(originalFile, generatedBlob, localEditForRun.cropRect, localEditForRun, localCompositeOptions);
@@ -8175,16 +8164,6 @@ function App() {
                     <option key={count} value={count}>{count}张</option>
                   ))}
                 </select>
-                <button
-                  className={`skillToggleButton ${settings.skillRulesEnabled ? "on" : ""}`}
-                  type="button"
-                  aria-pressed={settings.skillRulesEnabled}
-                  title="换装：开启时自动追加换装、局部编辑、图1/图2关系等规则块；关闭时只发送你输入的原始提示词，不改模型、渠道、上传图片和请求字段"
-                  onClick={() => updateSetting("skillRulesEnabled", !settings.skillRulesEnabled)}
-                >
-                  <span>换装</span>
-                  <i aria-hidden="true"><b /></i>
-                </button>
                 <button className="generateButton" type="button" onClick={() => generate()}>
                   {runningQuickTasks.length > 0 ? <Loader2 className="spin" size={17} /> : <Play size={17} />}
                   <span>生成</span>

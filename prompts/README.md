@@ -2,6 +2,12 @@
 
 这里是 V11 后续统一维护默认提示词、SKILL 和工作流规则的地方。
 
+> **2026-09-26 重大变更：批量生成的 SKILL / 图1图2 规则已整体删除**（用户实测"不加 SKILL 和
+> 图1/图2 的规则效果更好"）。批量侧服务端现在**只发用户自己写的文字**：
+> 原始提示词 + 姿态锚点智能文本 + 场景补充，逐字不改；"换装规则"开关、快捷生成"换装"开关
+> 也一起删掉了。`prompts/server/outfit-skill.js` 只剩提示词出口与错误摘要归一。
+> 一键详情/主图的 `detail-skills.js` **不受影响**，仍是各自独立的规则集。
+
 原则：改出图规则时，只改 `prompts/` 里的文件；不要顺手改 UI、上传、保存、并发、历史记录。
 
 ## 当前目录
@@ -10,8 +16,8 @@
 prompts/
   README.md
   server/
-    outfit-skill.js       批量生成/换装/扩图/改色/换脸等后端最终生图 SKILL
-    detail-skills.js      一键详情/主图的行业、平台、质检规则
+    outfit-skill.js       批量生成最终提示词出口（2026-09-26 起 = 只发用户原话，规则已删除）
+    detail-skills.js      一键详情/主图的行业、平台、质检规则（仍然生效）
   frontend/
     README.md             前端默认提示词归档计划
 ```
@@ -20,7 +26,7 @@ prompts/
 
 | 规则 | 维护文件 | 旧兼容入口 |
 | --- | --- | --- |
-| 批量换装、批量姿态、固定背景、随机背景、批量扩图、批量改色、白底精修、批量换脸、设计稿、局部回贴最终生图 SKILL | `prompts/server/outfit-skill.js` | `server/outfit-skill.js` |
+| 批量生成（换装/姿态/固定背景/随机背景/扩图/改色/白底精修/换脸/设计稿/局部回贴）最终提示词出口 | `prompts/server/outfit-skill.js`（**只发用户原话，不追加规则**） | `server/outfit-skill.js` |
 | 一键详情/主图行业规则、平台规则、质量检查规则 | `prompts/server/detail-skills.js` | `server/detail-skills.js` |
 
 旧兼容入口只负责转发，方便现有代码继续运行；以后真实修改请进 `prompts/`。
@@ -31,7 +37,7 @@ prompts/
 
 | 类型 | 当前位置 | 建议目标 |
 | --- | --- | --- |
-| 快捷生成局部编辑默认追加词 | `src/main.jsx` 的 `QUICK_*_PROMPT_SUFFIX` | `prompts/frontend/quickgen-prompts.js` |
+| 快捷生成提示词出口 | `src/shared/quickgen-prompt-rules.js`（只 trim，无追加规则） | 已独立成模块，可原样搬 |
 | 参考生图默认组合提示词 | `src/main.jsx` 的 `buildReferenceRemixPrompt`、`buildSmartReferencePrompt` | `prompts/frontend/reference-prompts.js` |
 | 批量换装页面默认提示词 | `src/outfit-workflow.jsx` 的 `OUTFIT_DEFAULT_PROMPT` 等 | `prompts/frontend/outfit-default-prompts.js` |
 | 批量姿态/固定背景/随机背景/扩图/改色/白底/换脸/设计稿默认提示词 | `src/outfit-workflow.jsx` 的各 `*_DEFAULT_PROMPT` | `prompts/frontend/outfit-workflow-defaults.js` |
@@ -40,16 +46,17 @@ prompts/
 
 ## 修改规则
 
-1. 如果要改“模型最终吃到的规则”，优先改 `prompts/server/outfit-skill.js`。
-2. 如果要改“用户一打开页面看到的默认提示词”，改 `prompts/frontend/` 中对应文件；尚未迁移的先按上表到当前位置修改。
-3. 同一个工作流的前端默认提示词和后端 SKILL 要同步检查，但不要写成完全重复的长文本。
-4. 前端默认提示词负责让用户看得懂、可编辑；后端 SKILL 负责模型执行边界。
-5. 图3规则、局部回贴规则、母版锁版型规则是核心稳定链路，修改前先单独记录原因和回归素材。
-6. 不要把 API Key、渠道商地址、价格、账号信息写进任何提示词文件。
+1. 批量生成**不再有**"模型最终吃到的规则"这一层：要影响出图，就改默认提示词（前端）或让用户自己写。
+   如果将来要重新引入规则，请先单独确认，不要用旧字段偷偷接回来。
+2. 如果要改"用户一打开页面看到的默认提示词"，改 `prompts/frontend/` 中对应文件；尚未迁移的先按上表到当前位置修改。
+3. 一键详情/主图仍然有后端规则集（`prompts/server/detail-skills.js`），改它时注意前后端同步检查。
+4. 前端默认提示词负责让用户看得懂、可编辑；批量侧不再有"后端硬规则"配合。
+5. 不要把 API Key、渠道商地址、价格、账号信息写进任何提示词文件。
 
 ## 修改后必跑
 
 ```powershell
-D:\RJ\node\npm.cmd run check
-D:\RJ\node\npm.cmd run build
+npm run check
+npm run build
 ```
+

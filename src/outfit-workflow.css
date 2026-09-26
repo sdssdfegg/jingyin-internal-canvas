@@ -3444,8 +3444,7 @@
 }
 
 .outfitWorkflowEmbedded .smartInterventionSwitch,
-.outfitWorkflowEmbedded .qualityCheckSwitch,
-.outfitWorkflowEmbedded .batchSkillRulesSwitch {
+.outfitWorkflowEmbedded .qualityCheckSwitch {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -3460,8 +3459,7 @@
 }
 
 .outfitWorkflowEmbedded .smartInterventionSwitch span,
-.outfitWorkflowEmbedded .qualityCheckSwitch span,
-.outfitWorkflowEmbedded .batchSkillRulesSwitch span {
+.outfitWorkflowEmbedded .qualityCheckSwitch span {
   min-width: 52px;
   font-size: 12px;
   font-weight: 700;
@@ -3469,8 +3467,7 @@
 }
 
 .outfitWorkflowEmbedded .smartInterventionSwitch i,
-.outfitWorkflowEmbedded .qualityCheckSwitch i,
-.outfitWorkflowEmbedded .batchSkillRulesSwitch i {
+.outfitWorkflowEmbedded .qualityCheckSwitch i {
   position: relative;
   display: inline-flex;
   width: 42px;
@@ -3482,8 +3479,7 @@
 }
 
 .outfitWorkflowEmbedded .smartInterventionSwitch i b,
-.outfitWorkflowEmbedded .qualityCheckSwitch i b,
-.outfitWorkflowEmbedded .batchSkillRulesSwitch i b {
+.outfitWorkflowEmbedded .qualityCheckSwitch i b {
   position: absolute;
   top: 3px;
   left: 3px;
@@ -3496,21 +3492,18 @@
 }
 
 .outfitWorkflowEmbedded .smartInterventionSwitch.on,
-.outfitWorkflowEmbedded .qualityCheckSwitch.on,
-.outfitWorkflowEmbedded .batchSkillRulesSwitch.on {
+.outfitWorkflowEmbedded .qualityCheckSwitch.on {
   border-color: color-mix(in srgb, #49c85b 48%, var(--border));
 }
 
 .outfitWorkflowEmbedded .smartInterventionSwitch.on i,
-.outfitWorkflowEmbedded .qualityCheckSwitch.on i,
-.outfitWorkflowEmbedded .batchSkillRulesSwitch.on i {
+.outfitWorkflowEmbedded .qualityCheckSwitch.on i {
   background: #49c85b;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, #ffffff 20%, transparent);
 }
 
 .outfitWorkflowEmbedded .smartInterventionSwitch.on i b,
-.outfitWorkflowEmbedded .qualityCheckSwitch.on i b,
-.outfitWorkflowEmbedded .batchSkillRulesSwitch.on i b {
+.outfitWorkflowEmbedded .qualityCheckSwitch.on i b {
   transform: translateX(20px);
 }
 

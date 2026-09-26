@@ -116,10 +116,11 @@ for (const token of [...FORBIDDEN_TOKENS, ...FORBIDDEN_IDS]) {
 
 // JSX 硬编码：快捷生成线路菜单只渲染 channelsForModel 的结果，不该写死渠道名
 const mainJsx = read("src/main.jsx");
-const quickCluster = mainJsx.slice(
-  mainJsx.indexOf("quickToolCluster"),
-  mainJsx.indexOf("skillToggleButton")
-);
+const quickClusterStart = mainJsx.indexOf("quickToolCluster");
+// 结束边界用「生成按钮」这一段（2026-09-26 SKILL/换装开关删除后，原边界 skillToggleButton 已不存在）。
+const quickClusterEnd = mainJsx.indexOf("generateButton", quickClusterStart);
+const quickCluster = mainJsx.slice(quickClusterStart, quickClusterEnd > quickClusterStart ? quickClusterEnd : quickClusterStart + 4000);
+check("成功切出快捷悬浮框功能组（用于渠道硬编码检查）", quickClusterStart > 0 && quickCluster.length > 200, `len=${quickCluster.length}`);
 for (const token of [...FORBIDDEN_TOKENS, ...FORBIDDEN_IDS]) {
   check(`快捷悬浮框 JSX 不含旧渠道 ${token}`, !quickCluster.includes(token));
 }

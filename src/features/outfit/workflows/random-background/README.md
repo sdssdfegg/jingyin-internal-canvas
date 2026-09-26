@@ -8,7 +8,7 @@
 | 搜索词 | `DEFAULT_RANDOM_BACKGROUND_PAGE_NAME`、`RANDOM_BACKGROUND_DEFAULT_PROMPT`、`isRandomBackgroundWorkflow` |
 | 前端 API | `src/api/outfit.js` 的 `generateOutfit()` |
 | 本地接口 | `/api/generate-outfit` |
-| 后端 SKILL | `prompts/server/outfit-skill.js` |
+| 后端提示词出口 | `prompts/server/outfit-skill.js`（2026-09-26 起 = 只发用户原话，SKILL/规则已删除） |
 
 这个分区通常只上传图1，并依赖“场景补充”。改场景随机规则时不要改固定背景的图2配对逻辑。
 
@@ -19,4 +19,6 @@
 - 禁止硬抠贴图：人物边缘、发丝、衣服边缘、脚底接触阴影必须像真实拍摄，不能有白边、黑边、锯齿边、旧背景残边或贴纸感。
 - 整批统一：禁止一张暖黄、一张背光阴天、一张地面大太阳斑；随机的是机位和背景细节，不是亮度体系。
 
-改默认提示词优先看 `src/outfit-workflow.jsx` 的 `RANDOM_BACKGROUND_DEFAULT_PROMPT`；改最终发给模型的硬规则看 `prompts/server/outfit-skill.js` 的 `buildRandomBackgroundPrompt()` 和 `randomBackgroundModelSkill()`。
+上面这些约束以前由后端 SKILL（`buildRandomBackgroundPrompt()`）追加；**2026-09-26 起后端只发用户原话**，
+所以它们现在只作为"默认提示词"的内容存在：改默认词看 `src/outfit-workflow.jsx` 的 `RANDOM_BACKGROUND_DEFAULT_PROMPT`，
+或在提示词里自己写清楚。
