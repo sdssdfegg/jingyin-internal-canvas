@@ -56,6 +56,7 @@ import { createDetailAiPlan } from "./detail-ai.js";
 import { buildDetailPromptGroup as buildDetailPromptGroupV2 } from "./detail-middleware.js";
 import { buildOutfitPrompt, primaryOutfitGenerationError } from "./outfit-skill.js";
 import { validateOutfitIntent } from "../src/shared/outfit-intent.js";
+import { validateRetouchIntent } from "../src/shared/retouch-intent.js";
 import { createOutfitMasterFitSpec } from "./outfit-master-fit-ai.js";
 import { createOutfitQualityCheck } from "./outfit-quality-ai.js";
 import { createOutfitPoseAnchor } from "./outfit-pose-ai.js";
@@ -4592,6 +4593,25 @@ app.post("/api/generate-outfit", wrapOutfitUpload(imageForwardUpload.fields([
     if (String(payload.workflowMode || "") === "outfit") {
       // 用归一化后的意图覆盖，后面 buildOutfitPrompt() 只认这一份。
       payload = { ...payload, outfitIntent: intentCheck.intent };
+      promptPayload = payload;
+    }
+  }
+
+  // 服装精修结构化意图：服务端权威校验（与换装同口径）。
+  // 非法枚举 / 版本不对 / customPrompt 不是字符串 → 明确 400，绝不让 [object Object] 进提示词。
+  if (payload.retouchIntent !== undefined) {
+    const retouchCheck = validateRetouchIntent(payload.retouchIntent);
+    if (!retouchCheck.ok) {
+      await removeUploadedFiles(req.files);
+      return res.status(400).json({
+        ok: false,
+        error: "invalid_retouch_intent",
+        message: `精修设置不合法：${retouchCheck.errors[0]}`,
+        errors: retouchCheck.errors
+      });
+    }
+    if (String(payload.workflowMode || "") === "white-refine") {
+      payload = { ...payload, retouchIntent: retouchCheck.intent };
       promptPayload = payload;
     }
   }

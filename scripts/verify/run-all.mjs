@@ -61,6 +61,9 @@ const ORDER = [
   "outfit-intent-request-check",
   // 2026-09-26：精修页「结果图中线剪裁成两张」（3.0 同口径的开关 + 两张半图真的落盘）。
   "white-refine-split-check",
+  // 2026-09-26：服装精修结构化意图（对称/衣摆/版型/用户补充）+ 唯一精简提示词编译器。
+  "retouch-intent-check",
+  "retouch-intent-request-check",
   "lint-ratchet-check",
   "run-all-check",
   "check-launcher"

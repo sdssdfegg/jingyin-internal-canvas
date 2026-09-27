@@ -112,6 +112,21 @@ import { emitClientDiagnosticEvent } from "./api/client.js";
 import { generateVideo, getVideoStatus } from "./api/videos.js";
 import { normalizeApiKeyInput } from "./features/auth/api-key.js";
 import {
+  RETOUCH_AUTO_PROMPT_CHAR_LIMIT,
+  RETOUCH_CUSTOM_PROMPT_LIMIT,
+  RETOUCH_FIT_OPTIONS,
+  RETOUCH_HEM_OPTIONS,
+  RETOUCH_SYMMETRY_OPTIONS,
+  compileRetouchPrompt,
+  defaultRetouchIntent,
+  normalizeRetouchIntent,
+  summarizeRetouchIntent,
+  validateRetouchIntent,
+  WHITE_REFINE_BATCH_LEGACY_DEFAULT_PROMPT,
+  WHITE_REFINE_COLOR_LOCK_LEGACY_DEFAULT_PROMPT,
+  WHITE_REFINE_DEFAULT_PROMPT
+} from "./shared/retouch-intent.js";
+import {
   readSplitHalvesEnabled,
   splitHalvesFileName,
   splitImageIntoHalves,
@@ -122,6 +137,7 @@ import { readJsonStorage, removeStorageItem, writeJsonStorage } from "./lib/stor
 import "./outfit-workflow.css";
 import "./features/outfit/outfit-intent.css";
 import "./features/outfit/white-refine-split.css";
+import "./features/outfit/retouch-intent.css";
 
 const STORAGE_KEY = "jingyin-outfit-workflow-settings-v1";
 const BATCH_CONCURRENCY_DEFAULT_MIGRATION_KEY = "batchConcurrencyDefaultV5Applied";
@@ -385,41 +401,6 @@ const RECOLOR_DEFAULT_PROMPT = [
   "颜色校准以图2主颜色参考为准：不要增加饱和度、对比度、油润感、高光或商业滤镜；同批保持同一目标色阶，不变深、不变艳、不发油、不发灰。",
   "同一批结果颜色要统一稳定，目标部位颜色要自然贴合图1原有光影、褶皱、材质纹理和边缘阴影；不要出现断层、涂抹感、边缘溢色、皮肤染色、场景变色、整张图偏色或一批里明显色差。",
   "如果图1开启局部回贴，只处理选区或蒙版范围内的目标服装颜色，输出必须和选区同构图、同角度、同光影，方便系统贴回原图。"
-].join("\n");
-const WHITE_REFINE_COLOR_LOCK_LEGACY_DEFAULT_PROMPT = [
-  "批量白底精修服装任务：图1上传区是批量要处理的服装平铺图/挂拍图，图2上传区是可选参考/细节图，本页不使用图3。",
-  "目标是把图1处理成干净白底电商商品图：去掉原背景、衣架、挂钩、夹子、支撑物、杂乱阴影、脏点和多余道具，让服装平铺/挂拍形态更规整自然。",
-  "只允许做白底清理、衣架去除、边缘修净、轻度版面摆正、压痕和杂乱褶皱整理；保留轻微自然松弛垂感，不要抹平面料原有纹理和针织/皮革/牛仔/雪纺等材质特征。",
-  "图1服装是唯一主事实：颜色深浅、饱和度、版型、长度、领口、袖口、袖克夫、扣子、拉链、腰带、口袋、刺绣、印花、压线、拼接、面料材质和全部可见细节都不能改变。",
-  "颜色校准以图1原服装为准：不要增加饱和度、对比度、油润感、高光或商业滤镜；牛仔、针织、皮革、雪纺等面料保持原始色阶，不变深、不变艳、不发油、不发灰。",
-  "图2如果上传，只作为参考池：可以帮助理解标准平铺形态、袖口/腰带/扣子/面料细节或衣架去除后的自然补齐方式；不能把图2款式、颜色、图案、背景或新结构迁移到图1。",
-  "最终输出高清白底服装商品图，无模特、无人台、无衣架、无文字、水印、标签说明或拼贴对比图。"
-].join("\n");
-// 2026-09-26 改「多图生图」之前的那一版精修默认词（8 行"批量…"版）。
-// 只用于把还停在旧默认词上的页面迁移到新默认词；用户自己改过的提示词不会被覆盖。
-const WHITE_REFINE_BATCH_LEGACY_DEFAULT_PROMPT = [
-  "批量白底精修服装任务：图1上传区是批量要处理的服装平铺图/挂拍图，图2上传区是可选参考/细节图，本页不使用图3。",
-  "目标是把图1处理成干净白底电商商品图：去掉原背景、衣架、挂钩、夹子、图钉、别针、固定针、支撑物、杂乱阴影、脏点和多余道具，让服装平铺/挂拍形态更规整自然。",
-  "只允许做白底清理、衣架去除、边缘修净、轻度版面摆正、压痕和杂乱褶皱整理；去掉运输压痕、固定造成的尖锐折痕和多余皱团，但保留服装结构需要的自然垂感、缝线边缘和面料纹理。",
-  "图1服装是唯一主事实：颜色深浅、明度、饱和度、灰度、白位黑位、版型、长度、领口、袖口、袖克夫、扣子、拉链、腰带、口袋、刺绣、印花、压线、拼接、面料材质和全部可见细节都不能改变。",
-  "颜色校准以图1原服装为准，尤其牛仔、水洗、做旧、针织、皮革、雪纺等面料必须保持原始色阶：不要提蓝、提饱和、加深颜色、提高对比度、增加油润感、高光、锐化、商业滤镜或自动美化；右图不能比原图更艳、更深、更蓝、更硬。",
-  "白底可以变干净，但服装本体不能被重新渲染成新商品图；只能用同一件服装附近纹理补齐被衣架、夹子、图钉、别针遮挡的位置，不能新增口袋、压线、洗水纹、褶皱纹理或改变原本水洗分布。",
-  "图2如果上传，只作为参考池：可以帮助理解标准平铺形态、袖口/腰带/扣子等局部细节或衣架去除后的自然补齐方式；不能把图2款式、颜色、图案、背景或新结构迁移到图1。",
-  "最终输出高清白底服装商品图，无模特、无人台、无衣架、无挂钩、无夹子、无图钉、无别针、无固定针、无文字、水印、标签说明或拼贴对比图。"
-].join("\n");
-// 2026-09-26（按用户描述重写）：精修改成「多图生图」——
-// 图1、图2 … 图N 是同一件服装的多张素材，一次全部上传，点生成只输出一张白底成品图。
-// 除输入方式外，其余硬约束（颜色保真、不改结构、去衣架/道具、不加滤镜锐化）全部保留。
-const WHITE_REFINE_DEFAULT_PROMPT = [
-  "白底精修任务（多图生图）：图1、图2……图N 是**同一件服装**的多张素材，可能是正面、背面、侧面、平铺、挂拍或局部细节，一次全部上传即可。",
-  "点击生成只输出**一张**白底精修成品图：把这几张素材里的同一件服装综合成一张干净商品图；不要输出多张、不要左右拼贴、不要分格、不要做对比图或说明图。",
-  "不同素材之间只做信息互补（背面补正面看不到的结构，细节图补领口/袖口/扣子/面料），不能把某张素材的背景、道具、阴影、模特、衣架或另一件服装的部件拼进成品。",
-  "目标是把这件服装处理成干净白底电商商品图：去掉原背景、衣架、挂钩、夹子、图钉、别针、固定针、支撑物、杂乱阴影、脏点和多余道具，让平铺/挂拍形态规整自然。",
-  "只允许做白底清理、衣架去除、边缘修净、轻度版面摆正、压痕和杂乱褶皱整理；去掉运输压痕、固定造成的尖锐折痕和多余皱团，但保留服装结构需要的自然垂感、缝线边缘和面料纹理。",
-  "这件服装是唯一主事实：颜色深浅、明度、饱和度、灰度、白位黑位、版型、长度、领口、袖口、袖克夫、扣子、拉链、腰带、口袋、刺绣、印花、压线、拼接、面料材质和全部可见细节都不能改变。",
-  "颜色校准以素材原服装为准，尤其牛仔、水洗、做旧、针织、皮革、雪纺等面料必须保持原始色阶：不要提蓝、提饱和、加深颜色、提高对比度、增加油润感、高光、锐化、商业滤镜或自动美化。",
-  "白底可以变干净，但服装本体不能被重新渲染成新商品图；只能用同一件服装附近纹理补齐被衣架、夹子、图钉、别针遮挡的位置，不能新增口袋、压线、洗水纹、褶皱纹理或改变原本水洗分布。",
-  "最终输出一张高清白底服装商品图，无模特、无人台、无衣架、无挂钩、无夹子、无图钉、无别针、无固定针、无文字、水印、标签说明或拼贴对比图。"
 ].join("\n");
 const DESIGN_DRAFT_DEFAULT_PROMPT = [
   "参考图1上传区的实拍服装图或真人实拍服装图，将服装转换为图2上传区所参考的干净服装设计师手稿风格。图1上传区可能只有一张图，也可能有多张正面、背面、侧面或细节图；请把图1上传区的所有图片当作同一件服装的参考，综合识别服装颜色、版型、领口、袖型、袖口、下摆、长度比例、结构线、拼接方式和主要面料特点。图3上传区是可选的细节补充图，只有上传时才作为面料、袖口、裙摆、衣领、纹理或辅助线效果的补充参考；如果图3没有上传，不要强行假设图3内容。",
@@ -997,6 +978,8 @@ const defaultSettings = {
   garmentComposition: DEFAULT_GARMENT_COMPOSITION,
   // 批量换装的结构化意图（唯一来源）：更换部位 / 上装层级 / 穿法 / 图2服装事实。
   outfitIntent: defaultOutfitIntent(),
+  // 服装精修的结构化意图（唯一来源）：对称 / 衣摆或裙摆 / 版型 / 用户补充。
+  retouchIntent: defaultRetouchIntent(),
   pairingMode: "fixed",
   preprocessMode: DEFAULT_PREPROCESS_MODE,
   randomBackgroundFocus: "default",
@@ -1024,6 +1007,7 @@ function readSettings() {
     settings.garmentParts = normalizeGarmentParts(settings.garmentParts);
     settings.garmentComposition = normalizeGarmentComposition(settings.garmentComposition, settings.garmentParts);
     settings.outfitIntent = normalizeOutfitIntent(settings.outfitIntent);
+    settings.retouchIntent = normalizeRetouchIntent(settings.retouchIntent);
     settings.randomBackgroundFocus = normalizeRandomBackgroundFocus(settings.randomBackgroundFocus);
     settings.concurrency = normalizeBatchConcurrency(settings.concurrency);
     settings.preprocessMode = DEFAULT_PREPROCESS_MODE;
@@ -1273,6 +1257,7 @@ function normalizeOutfitPageSettings(value = {}, options = {}) {
   // 旧存档里的 garmentParts / garmentComposition / garmentLengths / masterFit* 只做安全读取：
   // 它们留在对象里不报错，但不再影响批量换装的任何行为，也不会覆盖新的 outfitIntent。
   settings.outfitIntent = normalizeOutfitIntent(settings.outfitIntent);
+  settings.retouchIntent = normalizeRetouchIntent(settings.retouchIntent);
   settings.randomBackgroundFocus = normalizeRandomBackgroundFocus(settings.randomBackgroundFocus);
   settings.concurrency = normalizeBatchConcurrency(settings.concurrency);
   settings.theme = normalizeTheme(settings.theme);
@@ -7130,6 +7115,8 @@ export default function OutfitWorkflow({
   // 精修页「结果图中线剪裁成两张」开关（默认开，和 3.0 的 localStorage 口径一致）+ 状态提示。
   const [splitHalves, setSplitHalves] = useState(() => readSplitHalvesEnabled());
   const [splitNote, setSplitNote] = useState("");
+  // 精修「查看本次最终提示词」展开开关（内容来自真正的编译器）。
+  const [retouchPreviewOpen, setRetouchPreviewOpen] = useState(false);
   const [, setEvents] = useState([]);
   const [clockNow, setClockNow] = useState(Date.now());
   const [cropTarget, setCropTarget] = useState(null);
@@ -7230,6 +7217,18 @@ export default function OutfitWorkflow({
   const outfitPromptWithNote = [outfitAutoPrompt, String(settings.productNote || "").trim()]
     .filter(Boolean)
     .join("\n");
+
+  // 服装精修的结构化意图（唯一来源）：对称 / 衣摆或裙摆 / 版型 / 用户补充。
+  const retouchIntent = normalizeRetouchIntent(settings.retouchIntent);
+  const retouchSummary = summarizeRetouchIntent(retouchIntent);
+  // 精修最终提示词预览：与提交时服务端用的是**同一个编译器**。
+  // 页面上的「通用白底精修提示词」是用户自己的输入；如果它还是系统默认词，
+  // 编译器会自动忽略它（固定段已经覆盖同样内容），避免同义重复。
+  const retouchPreview = compileRetouchPrompt({
+    intent: retouchIntent,
+    userPrompt: settings.prompt,
+    productNote: settings.productNote
+  });
   const completedCount = tasks.filter((task) => task.status === "success").length;
   const failedCount = tasks.filter((task) => task.status === "failed").length;
   const runningCount = tasks.filter((task) => task.status === "running").length;
@@ -7894,6 +7893,15 @@ export default function OutfitWorkflow({
 
   function wearingFieldValue(key) {
     return outfitIntent.wearing.values[key] || "";
+  }
+
+  // 精修：唯一改动结构化精修意图的入口（同一个 normalize，保证枚举合法、字段完整）。
+  function patchRetouchIntent(patch) {
+    setSettings((current) => {
+      const currentIntent = normalizeRetouchIntent(current.retouchIntent);
+      const nextPatch = typeof patch === "function" ? patch(currentIntent) : patch;
+      return { ...current, retouchIntent: normalizeRetouchIntent({ ...currentIntent, ...nextPatch }) };
+    });
   }
 
   // 中文注释：批量改色的改色范围（只有 recolor 还在用这套旧机制）。
@@ -9549,6 +9557,8 @@ function buildTasks(countOverride = plannedGenerationCount) {
         // 中文注释：把本轮结构化换装意图（部位 / 上装层级 / 穿法 / 图2事实）冻结在任务快照里。
         // 批次开始后再改界面，只影响下一批，不会改到在途任务的提示词。
         outfitIntent: isOutfitWorkflow ? normalizeOutfitIntent(settings.outfitIntent) : undefined,
+        // 精修结构化意图同样冻结进任务快照：批次开始后改界面不会改到在途任务。
+        retouchIntent: isWhiteRefineWorkflow ? normalizeRetouchIntent(settings.retouchIntent) : undefined,
         pairingMode: settings.pairingMode,
         modelLabel: activeModel.label,
         modelName: modelItem?.name || "",
@@ -9708,6 +9718,8 @@ function buildTasks(countOverride = plannedGenerationCount) {
       randomBackgroundFocus: taskIsRandomBackground ? normalizeRandomBackgroundFocus(task.randomBackgroundFocus || settings.randomBackgroundFocus) : undefined,
       // 结构化换装意图：只认任务快照（批次开始后就冻结），不再读当前界面设置。
       outfitIntent: taskIsOutfit ? normalizeOutfitIntent(task.outfitIntent || settings.outfitIntent) : undefined,
+      // 精修结构化意图：同样只认任务快照（冻结），批次开始后改界面不影响在途任务。
+      retouchIntent: taskIsWhiteRefine ? normalizeRetouchIntent(task.retouchIntent || settings.retouchIntent) : undefined,
       workflowMode: taskWorkflowMode,
       pageName: task.pageName || activeOutfitPage.name,
       uploadLabels: task.uploadLabels || uploadLabels,
@@ -9993,6 +10005,16 @@ function buildTasks(countOverride = plannedGenerationCount) {
     }
     if (isRandomBackgroundWorkflow && !String(settings.productNote || "").trim()) {
       addEvent("随机背景", "未填写场景补充，本轮先按干净真实电商实景背景生成；想指定风格时再补场景需求。");
+    }
+    // 精修：提交前再自检一次结构化意图（枚举/版本），不合法的直接拦下并提示，
+    // 避免把非法枚举发到服务端换一个 400。
+    if (isWhiteRefineWorkflow) {
+      const retouchCheck = validateRetouchIntent(retouchIntent);
+      if (!retouchCheck.ok) {
+        addEvent("精修设置", retouchCheck.errors[0] || "精修设置不合法");
+        setInlineMessage(retouchCheck.errors[0] || "精修设置不合法");
+        return;
+      }
     }
     const taskCount = isDesignDraftWorkflow ? 1 : Math.min(plannedGenerationCount, outfitMaxImages);
     const baseOrder = tasks.length;
@@ -10531,6 +10553,118 @@ function buildTasks(countOverride = plannedGenerationCount) {
       return picked.length ? picked.join("｜") : "还没指定任何状态，将只保留部位与图2事实";
     }
     return "跟随图2穿法，不自行改变扣合、衣摆、袖子和领口";
+  }
+
+  // 精修设置区（位置与换装的换装设置一致：都在提示词区左半边）。
+  // 紧凑分组 + 只在需要时展开明细：对称 / 衣摆或裙摆 / 版型 / 用户补充。
+  function renderRetouchIntentPanel() {
+    const chipGroup = (options, current, onPick) => options.map((option) => {
+      const active = current === option.value;
+      return (
+        <button
+          className={active ? "active" : ""}
+          key={option.value}
+          type="button"
+          aria-pressed={active}
+          onClick={() => onPick(option.value)}
+        >
+          {active && <Check size={13} />}
+          <span>{option.label}</span>
+        </button>
+      );
+    });
+    const followHint = (value, label) => (value === "follow_original"
+      ? `未选择「${label}」时只写"跟随原图"，不偷偷改版型、长度和尺寸`
+      : `会在最终提示词里写入改变指令：${label}`);
+    return (
+      <section className="retouchIntentPanel" aria-label="精修设置">
+        <header>
+          <div>
+            <h3>精修设置</h3>
+            <span>这里的选择会进入最终提示词；批次开始后再改只影响下一批。</span>
+          </div>
+          <span className="retouchIntentCount">
+            {`白底精修｜对称：${retouchSummary.symmetryText}｜衣摆：${retouchSummary.hemText}｜版型：${retouchSummary.fitText}`}
+          </span>
+        </header>
+
+        <div className="retouchIntentRow">
+          <span className="retouchIntentRowTitle">对称</span>
+          <div className="retouchIntentChips">
+            {chipGroup(RETOUCH_SYMMETRY_OPTIONS, retouchIntent.symmetry, (value) => patchRetouchIntent({ symmetry: value }))}
+          </div>
+          <small className={retouchIntent.symmetry === "off" ? "" : "retouchIntentWarn"}>
+            {retouchIntent.symmetry === "off"
+              ? "关闭对称：最大限度保留原图中真实的左右不对称细节，并明确禁止强行对称"
+              : "开启服装对称：只调整服装左右结构，不改变人物身体、脸、姿势、服装款式，也不新增设计"}
+          </small>
+        </div>
+
+        <div className="retouchIntentRow">
+          <span className="retouchIntentRowTitle">衣摆或裙摆</span>
+          <div className="retouchIntentChips">
+            {chipGroup(RETOUCH_HEM_OPTIONS, retouchIntent.hemTreatment, (value) => patchRetouchIntent({ hemTreatment: value }))}
+          </div>
+          <small className={retouchIntent.hemTreatment === "follow_original" ? "" : "retouchIntentWarn"}>
+            {retouchIntent.hemTreatment === "follow_original"
+              ? "跟随原图：不添加任何衣摆/裙摆改变指令"
+              : retouchIntent.hemTreatment === "straight"
+                ? "平直：把明显歪扭或摆放造成的波浪拉平直，但不抹掉原有开衩、褶裥和设计线"
+                : "自然波浪：呈现自然垂落的波浪，不凭空制造夸张褶皱"}
+          </small>
+        </div>
+
+        <div className="retouchIntentRow">
+          <span className="retouchIntentRowTitle">版型</span>
+          <div className="retouchIntentChips">
+            {chipGroup(RETOUCH_FIT_OPTIONS, retouchIntent.fit, (value) => patchRetouchIntent({ fit: value }))}
+          </div>
+          <small className={retouchIntent.fit === "follow_original" ? "" : "retouchIntentWarn"}>
+            {followHint(retouchIntent.fit, RETOUCH_FIT_OPTIONS.find((item) => item.value === retouchIntent.fit)?.label || "版型")}
+          </small>
+        </div>
+
+        <div className="retouchIntentRow">
+          <span className="retouchIntentRowTitle">用户补充</span>
+          <DebouncedTextarea
+            className="retouchIntentCustom"
+            value={retouchIntent.customPrompt}
+            onChange={(value) => patchRetouchIntent({ customPrompt: value })}
+            onKeyDown={handlePromptKeyDown}
+            placeholder="只写本次特殊要求，例如：背景保持纯白、保留吊牌、口袋压线要清楚。留空则只用上面的设置。"
+          />
+          <small>
+            {retouchIntent.customPrompt.length}/{RETOUCH_CUSTOM_PROMPT_LIMIT} 字 · 只作为【用户补充】出现一次，不会复制到其它段落
+          </small>
+        </div>
+
+        <div className="retouchIntentRow">
+          <div className="retouchIntentInline">
+            <small>
+              自动提示词 {retouchPreview.autoChars}/{RETOUCH_AUTO_PROMPT_CHAR_LIMIT} 字 · 用户补充 {retouchPreview.userChars} 字
+            </small>
+            <button className="imageFactToggle" type="button" onClick={() => setRetouchPreviewOpen((value) => !value)} aria-expanded={retouchPreviewOpen}>
+              {retouchPreviewOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              <span>{retouchPreviewOpen ? "收起最终提示词" : "查看本次最终提示词"}</span>
+            </button>
+          </div>
+          {retouchPreviewOpen && (
+            <div className="retouchIntentPreview">
+              <pre>{retouchPreview.prompt}</pre>
+              <small>
+                共 {retouchPreview.chars} 字。这段就是服务端会用同一个编译器发出去的内容
+                （服务端还会追加智能介入文本，本页当前不启用）。
+              </small>
+            </div>
+          )}
+          {retouchPreview.warnings.length > 0 && (
+            <ul className="retouchIntentWarnings">
+              {retouchPreview.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+            </ul>
+          )}
+        </div>
+      </section>
+    );
   }
 
   function renderResultQueue() {
@@ -11134,10 +11268,16 @@ function buildTasks(countOverride = plannedGenerationCount) {
           {/* 2026-09-26（按用户要求）：换装设置内容不多，搬到提示词左边这半边的空位里，
               原来在图1~图3下面占的那一整块竖向空间就省出来了。
               左边 = 换装设置；右边 = 通用换装提示词 + 补充提示词。 */}
-          <div className={`composerBody ${isOutfitWorkflow ? "withIntent" : ""}`}>
+          <div className={`composerBody ${isOutfitWorkflow || isWhiteRefineWorkflow ? "withIntent" : ""}`}>
             {isOutfitWorkflow && (
               <div className="composerIntentCol">
                 {renderOutfitIntentPanel()}
+              </div>
+            )}
+            {/* 精修设置：位置和换装的换装设置一致（提示词区左半边），只换内容不换布局。 */}
+            {isWhiteRefineWorkflow && (
+              <div className="composerIntentCol">
+                {renderRetouchIntentPanel()}
               </div>
             )}
 

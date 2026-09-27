@@ -18,6 +18,7 @@
 // 服务端仍然是权威：非法枚举在路由层直接 400（见 server/index.js），这里再归一化一次。
 
 import { compileOutfitPrompt, validateOutfitIntent } from "../../src/shared/outfit-intent.js";
+import { compileRetouchPrompt, validateRetouchIntent } from "../../src/shared/retouch-intent.js";
 
 export function primaryOutfitGenerationError(errors) {
   const list = Array.isArray(errors) ? errors.filter(Boolean) : [];
@@ -52,6 +53,35 @@ export function usesOutfitIntent(payload) {
 }
 
 /**
+ * 服装精修（原「批量白底图精修」）的结构化意图是否应该生效。
+ * 只有 workflowMode === "white-refine" 带合法 retouchIntent 时才编译。
+ */
+export function usesRetouchIntent(payload) {
+  if (String(payload?.workflowMode || "") !== "white-refine") return false;
+  const raw = payload?.retouchIntent;
+  if (!raw || typeof raw !== "object") return false;
+  return validateRetouchIntent(raw).ok;
+}
+
+/**
+ * 服装精修的最终提示词：由共享的唯一编译器生成（前端预览用的是同一个函数）。
+ *
+ * 与换装的区别：精修页的「通用白底精修提示词」是**用户自己的输入**（不是编译结果），
+ * 所以这里必须编译，而不是像换装那样原样转发 payload.prompt。
+ * 页面提示词如果还是系统内置默认词，编译器会忽略它（固定段已覆盖同样内容），避免同义重复。
+ */
+export function buildRetouchPrompt(payload) {
+  const { intent } = validateRetouchIntent(payload.retouchIntent);
+  const compiled = compileRetouchPrompt({
+    intent,
+    userPrompt: payload?.prompt,
+    productNote: payload?.productNote
+  });
+  const poseAnchorPrompt = String(payload?.poseAnchorPrompt || "").trim();
+  return [compiled.prompt, poseAnchorPrompt].filter(Boolean).join("\n\n");
+}
+
+/**
  * 批量生成的最终提示词。
  *
  * 2026-09-26（本轮调整，按用户要求）：
@@ -65,9 +95,14 @@ export function usesOutfitIntent(payload) {
  *        这里再加一次就是重复发送（用户明确要求不能重复）；
  *     4. 「智能介入」的 poseAnchorPrompt 仍然追加，它不属于补充提示词。
  *
- * 其它情况（没有合法 outfitIntent 的批量 workflow）→ 只发用户原话（历史契约，行为不变）。
+ * 服装精修（white-refine + retouchIntent）走 buildRetouchPrompt()：
+ * 页面提示词是用户输入，所以由本层用共享编译器编译，保证"预览 == 实际发送"。
+ *
+ * 其它情况（既没有合法 outfitIntent 也没有合法 retouchIntent 的批量 workflow）
+ * → 只发用户原话（历史契约，行为不变）。
  */
 export function buildOutfitPrompt(payload) {
+  if (usesRetouchIntent(payload)) return buildRetouchPrompt(payload);
   if (!usesOutfitIntent(payload)) return buildUserPromptOnly(payload);
   const { intent } = validateOutfitIntent(payload.outfitIntent);
   const clientPrompt = String(payload?.prompt || "").trim();
