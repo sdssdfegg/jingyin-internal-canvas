@@ -110,10 +110,17 @@ import { displayImageRequestUrl, fetchImageBlob } from "./api/assets.js";
 import { emitClientDiagnosticEvent } from "./api/client.js";
 import { generateVideo, getVideoStatus } from "./api/videos.js";
 import { normalizeApiKeyInput } from "./features/auth/api-key.js";
+import {
+  readSplitHalvesEnabled,
+  splitHalvesFileName,
+  splitImageIntoHalves,
+  writeSplitHalvesEnabled
+} from "./shared/image-split.js";
 import { fileSize, formatWholeSecondMs as formatMs } from "./lib/format/index.js";
 import { readJsonStorage, removeStorageItem, writeJsonStorage } from "./lib/storage/json-storage.js";
 import "./outfit-workflow.css";
 import "./features/outfit/outfit-intent.css";
+import "./features/outfit/white-refine-split.css";
 
 const STORAGE_KEY = "jingyin-outfit-workflow-settings-v1";
 const BATCH_CONCURRENCY_DEFAULT_MIGRATION_KEY = "batchConcurrencyDefaultV5Applied";
@@ -206,14 +213,17 @@ const VIDEO_REFERENCE_MAX_BYTES = 10 * 1024 * 1024;
 const PROMPT_LIBRARY_VERSION = "v2-20260802";
 const PROMPT_PRESETS_KEY = `jingyin-outfit-workflow-prompt-library-${PROMPT_LIBRARY_VERSION}`;
 const PROMPT_CATEGORIES_KEY = `jingyin-outfit-workflow-prompt-categories-${PROMPT_LIBRARY_VERSION}`;
-const DEFAULT_OUTFIT_PAGE_NAME = "批量换装";
+const DEFAULT_OUTFIT_PAGE_NAME = "换装";
 const DEFAULT_POSE_REMIX_PAGE_NAME = "批量姿态";
 const DEFAULT_LOCAL_DETAIL_PAGE_NAME = "局部回贴";
 const DEFAULT_BACKGROUND_CHANGE_PAGE_NAME = "固定背景";
 const DEFAULT_RANDOM_BACKGROUND_PAGE_NAME = "随机背景";
 const DEFAULT_OUTPAINT_PAGE_NAME = "批量扩图";
 const DEFAULT_RECOLOR_PAGE_NAME = "批量改色";
-const DEFAULT_WHITE_REFINE_PAGE_NAME = "批量白底精修";
+// 2026-09-26：改版后显示名更短（用户要求）：批量换装 → 换装，批量白底图精修 → 精修。
+// 旧名字仍作为别名识别（见 normalizeOutfitPageName / isWhiteRefinePageName），
+// 老存档里的页面名会在读取时自动迁移到新名字。
+const DEFAULT_WHITE_REFINE_PAGE_NAME = "精修";
 const DEFAULT_FACE_SWAP_PAGE_NAME = "批量换脸";
 const DEFAULT_DESIGN_DRAFT_PAGE_NAME = "设计稿";
 const DEFAULT_CUSTOM_PAGE_NAME = "临时需求";
@@ -995,14 +1005,16 @@ function readSettings() {
 
 function normalizeOutfitPageName(value, fallback = DEFAULT_OUTFIT_PAGE_NAME) {
   const name = String(value || "").replace(/\s+/g, " ").trim();
-  if (name === "批量AI换装" || name === "批量生成") return DEFAULT_OUTFIT_PAGE_NAME;
+  // 旧名字（批量换装 / 批量AI换装 / 批量生成）统一迁移到新的短名字「换装」。
+  if (name === "批量AI换装" || name === "批量生成" || name === "批量换装") return DEFAULT_OUTFIT_PAGE_NAME;
   if (/批量姿态|批量姿态图|姿态参考图|固定模特换姿势|固定模特|固定人物|批量姿势|换姿势|姿势生成|姿势参考|pose/i.test(name)) return DEFAULT_POSE_REMIX_PAGE_NAME;
   if (/局部细节|局部精修|局部贴回|local\s*detail/i.test(name)) return DEFAULT_LOCAL_DETAIL_PAGE_NAME;
   if (/随机背景|随机场景|随机实景|random\s*background/i.test(name)) return DEFAULT_RANDOM_BACKGROUND_PAGE_NAME;
   if (/换固定背景|固定背景|换背景|換背景|背景更换|背景替换|换场景|換場景/i.test(name)) return DEFAULT_BACKGROUND_CHANGE_PAGE_NAME;
   if (/批量扩图|扩图|扩画布|向下扩|下半身扩图|补全下半身|outpaint|expand/i.test(name)) return DEFAULT_OUTPAINT_PAGE_NAME;
   if (/批量改色|改色|换色|服装改色|颜色替换|颜色参考|recolor/i.test(name)) return DEFAULT_RECOLOR_PAGE_NAME;
-  if (/批量白底精修|白底精修|白底图精修|服装精修|平铺精修|挂拍精修|去衣架|去掉衣架|white\s*refine/i.test(name)) return DEFAULT_WHITE_REFINE_PAGE_NAME;
+  // 「精修」是新的短名字；旧的「批量白底（图）精修」仍然识别，老存档读取时自动迁移。
+  if (/精修|白底精修|白底图精修|服装精修|平铺精修|挂拍精修|去衣架|去掉衣架|white\s*refine/i.test(name)) return DEFAULT_WHITE_REFINE_PAGE_NAME;
   return (name || fallback).slice(0, 18);
 }
 
@@ -1031,7 +1043,7 @@ function isRecolorPageName(value) {
 }
 
 function isWhiteRefinePageName(value) {
-  return /批量白底精修|白底精修|白底图精修|服装精修|平铺精修|挂拍精修|去衣架|去掉衣架|white\s*refine/i.test(String(value || ""));
+  return /精修|白底精修|白底图精修|服装精修|平铺精修|挂拍精修|去衣架|去掉衣架|white\s*refine/i.test(String(value || ""));
 }
 
 function isDesignDraftPageName(value) {
@@ -7072,6 +7084,9 @@ export default function OutfitWorkflow({
   const [wearingDetailOpen, setWearingDetailOpen] = useState(false);
   const [factsDetailOpen, setFactsDetailOpen] = useState(false);
   const [inlineMessage, setInlineMessage] = useState("");
+  // 精修页「结果图中线剪裁成两张」开关（默认开，和 3.0 的 localStorage 口径一致）+ 状态提示。
+  const [splitHalves, setSplitHalves] = useState(() => readSplitHalvesEnabled());
+  const [splitNote, setSplitNote] = useState("");
   const [, setEvents] = useState([]);
   const [clockNow, setClockNow] = useState(Date.now());
   const [cropTarget, setCropTarget] = useState(null);
@@ -7218,12 +7233,12 @@ export default function OutfitWorkflow({
           : isRecolorWorkflow
             ? "批量改色"
             : isWhiteRefineWorkflow
-              ? "批量白底精修"
+              ? "精修"
               : isFaceSwapWorkflow
                 ? "批量换脸"
                 : isLocalDetailWorkflow
                   ? "局部回贴"
-                  : "批量换装";
+                  : "换装";
   const promptFieldTitle = isDesignDraftWorkflow
     ? "通用设计稿提示词"
     : isPoseRemixWorkflow
@@ -9194,6 +9209,60 @@ export default function OutfitWorkflow({
     }, 1100);
   }
 
+  function toggleSplitHalves() {
+    const next = !splitHalves;
+    setSplitHalves(next);
+    writeSplitHalvesEnabled(next);
+    setSplitNote(next ? "已开启：生成后会自动裁切并保存左右两张" : "已关闭：只输出整张结果图");
+  }
+
+  // 精修页结果图中线剪裁：只在这一页、且开关打开时生效，其它页面/其它 workflow 完全不受影响。
+  // 与 3.0 的口径一致 —— 竖切中线、左右各存一张；只是 3.0 在服务端用 Pillow 切，
+  // V11 服务端不做图像处理，所以这里用 canvas 切好再走既有的 /api/save-processed-image。
+  async function splitWhiteRefineResult(task, image) {
+    const source = image?.cachedFile instanceof File ? image.cachedFile : imageSource(image);
+    if (!source) {
+      setSplitNote("裁切失败：结果图地址不可用");
+      return;
+    }
+    setSplitNote("正在从中线裁切…");
+    try {
+      const { halves, middle } = await splitImageIntoHalves(source);
+      const sourceName = task?.savedFilename || task?.result?.archiveFile || "";
+      const saved = [];
+      for (const half of halves) {
+        const file = new File([half.blob], splitHalvesFileName(half.label, sourceName), { type: "image/png" });
+        // 直接放保存目录根（和 3.0 一样），不塞子目录。
+        const payload = await saveProcessedImageToFolder(file, "");
+        saved.push({ label: half.label, filename: payload?.filename || "", path: payload?.path || "" });
+      }
+      const names = saved.map((item) => `${item.label} ${item.filename}`).join("　");
+      setSplitNote(`已裁切保存到：${saved[0]?.path ? saved[0].path.replace(/[\\/][^\\/]*$/, "") : ""}　${names}`);
+      addEvent("精修裁切", `已从中线（第 ${middle}px）切成左右两张：${names}`);
+    } catch (error) {
+      setSplitNote(`裁切失败：${error instanceof Error ? error.message : String(error)}`);
+      addEvent("精修裁切失败", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function renderSplitHalvesStrip() {
+    return (
+      <div className="whiteRefineSplit">
+        <button
+          className={`whiteRefineSplitSwitch ${splitHalves ? "on" : ""}`}
+          type="button"
+          aria-pressed={splitHalves ? "true" : "false"}
+          onClick={toggleSplitHalves}
+          title="把生成的结果从中线竖切成左右两张，分别保存"
+        >
+          <span>裁剪</span>
+          <i><b /></i>
+        </button>
+        <span className="whiteRefineSplitNote">{splitNote}</span>
+      </div>
+    );
+  }
+
   async function saveTaskImageToDirectory(task, imageOverride = null) {
     const image = imageOverride || task?.result;
     if (!task || !image) return null;
@@ -9830,6 +9899,11 @@ function buildTasks(countOverride = plannedGenerationCount) {
       };
     }));
     const autoSavePromise = autoSaveTask(finishedTaskForSave, resultImage);
+    // 精修页：结果图自动再从中线裁成左右两张（开关默认开，和 3.0 一样）。
+    // 用**任务自己记录的 workflowMode**判断，避免生成过程中切页导致误裁别的页面。
+    if (taskIsWhiteRefine && splitHalves) {
+      void autoSavePromise.then(() => splitWhiteRefineResult(finishedTaskForSave, resultImage));
+    }
     if (task.qualityCheckEnabled) {
       void runTaskQualityCheck({ ...task, prompt: payload.prompt, result: resultImage }, modelUploadFile, resultImage, taskAspectRatio, payload.prompt);
     }
@@ -10411,6 +10485,8 @@ function buildTasks(countOverride = plannedGenerationCount) {
   function renderResultQueue() {
     return (
       <section className="resultPanel queuePanel" id="result-archive-section">
+        {/* 精修页专属：结果图中线剪裁开关（样式与 3.0 一致，只在精修页出现）。 */}
+        {isWhiteRefineWorkflow && renderSplitHalvesStrip()}
         <div className="taskGrid" ref={taskGridRef} style={{ "--asset-card-min": `${galleryCardMin}px` }}>
           {visibleTasks.map((task, taskIndex) => {
             const selected = selectedTaskIds.has(task.id);
@@ -10606,7 +10682,7 @@ function buildTasks(countOverride = plannedGenerationCount) {
           <img src="/app-avatar.webp" alt="" />
           <div>
             <h1>静音AI换装</h1>
-            <span>批量换装流水线</span>
+            <span>换装流水线</span>
           </div>
         </div>
         <nav>

@@ -95,7 +95,7 @@ async function callGenerateOutfit({ taskId, payloadPatch = {}, model = "tt-image
     // 生产路径（前端已经把正文生成好）单独在「10) 转发」那一组里验。
     prompt: "",
     workflowMode: "outfit",
-    pageName: "批量换装",
+    pageName: "换装",
     pairingMode: "fixed",
     garmentParts: { upper: true, lower: true, shoes: false },
     garmentComposition: "套装",
@@ -158,10 +158,10 @@ try {
 
   // —— 1) 七种部位组合：目标句与保持句
   const combos = [
-    { parts: ["upper"], target: "让图1模特穿着图2的上装。", keep: "图1的下装和鞋子保持不变。" },
-    { parts: ["lower"], target: "让图1模特穿着图2的下装。", keep: "图1的上装和鞋子保持不变。" },
+    { parts: ["upper"], target: "让图1模特穿着图2的上装。", keep: "图1的下装保持不变。" },
+    { parts: ["lower"], target: "让图1模特穿着图2的下装。", keep: "图1的上装保持不变。" },
     { parts: ["shoes"], target: "让图1模特穿着图2的鞋子。", keep: "图1的上装和下装保持不变。" },
-    { parts: ["upper", "lower"], target: "让图1模特穿着图2的上装和下装。", keep: "图1的鞋子保持不变。" },
+    { parts: ["upper", "lower"], target: "让图1模特穿着图2的上装和下装。", keep: "" },
     { parts: ["upper", "shoes"], target: "让图1模特穿着图2的上装和鞋子。", keep: "图1的下装保持不变。" },
     { parts: ["lower", "shoes"], target: "让图1模特穿着图2的下装和鞋子。", keep: "图1的上装保持不变。" },
     { parts: ["upper", "lower", "shoes"], target: "让图1模特穿着图2的上装、下装和鞋子。", keep: "" }
@@ -196,7 +196,7 @@ try {
   // —— 3) 需求里那条完整原文（内搭+外套、下装/鞋子保持）
   const requiredPrompt = layerPrompts["inner-outer"];
   check("『内搭+外套、下装不变、鞋子不变』完整原文正确（目标句一排）",
-    requiredPrompt.includes("让图1模特穿着图2的内搭和外套。图1的下装和鞋子保持不变。"),
+    requiredPrompt.includes("让图1模特穿着图2的内搭和外套。图1的下装保持不变。"),
     requiredPrompt.slice(0, 160));
   check("人物基准只出现一次",
     requiredPrompt.split("图1是唯一人物身份、人体结构和姿势基准，不改变图1人物的身份、骨骼和姿势。").length - 1 === 1);
@@ -236,9 +236,19 @@ try {
   check("自定义穿法覆盖后图2事实不再重复扣合/衣摆/袖子",
     !custom.prompt.includes("门襟四颗扣子") && !custom.prompt.includes("衣摆外穿") && !custom.prompt.includes("袖子放下"),
     (custom.prompt.match(/类别与内外层[^\n]*/) || [])[0] || "(无事实行)");
-  check("『保持不变』在上游提示词里只出现一次", custom.prompt.split("保持不变").length - 1 === 1);
+  // 2026-09-26：鞋子不再进保持句 → 上装+下装都选时没有保持句（0 次），只选上装时只有 1 次。
+  check("上装+下装都换时没有保持句（鞋子不算未选部位）",
+    custom.prompt.split("保持不变").length - 1 === 0,
+    custom.prompt.split("\n")[0]);
+  const keepOnce = await promptFor("keep-once", { parts: ["upper"], upperLayer: "single" });
+  check("『保持不变』在上游提示词里只出现一次",
+    keepOnce.prompt.split("保持不变").length - 1 === 1,
+    keepOnce.prompt.split("\n")[0]);
   // 2026-09-26（按用户要求）：发给模型的提示词是纯正文，不带【】分区小标题。
   check("上游最终提示词不含任何【】小标题", !/【[^】]*】/.test(custom.prompt), custom.prompt.slice(0, 80));
+  check("最终提示词里不出现「鞋子保持不变」",
+    !custom.prompt.includes("鞋子保持不变") && !keepOnce.prompt.includes("鞋子保持不变"),
+    keepOnce.prompt.split("\n")[0]);
 
   // —— 6) 图2事实只插入所选部位
   const factsOnly = { category: "衬衫", color: "白色", lowerType: "直筒牛仔裤", shoeType: "白色运动鞋" };
@@ -302,7 +312,7 @@ try {
 
   // —— 10) 生产路径：前端已经把「通用换装提示词」生成好（含补充提示词），服务端必须原样转发
   const clientPrompt = [
-    "让图1模特穿着图2的内搭和外套。图1的下装和鞋子保持不变。",
+    "让图1模特穿着图2的内搭和外套。图1的下装保持不变。",
     "",
     "类别与内外层：外套+内搭两层",
     "",

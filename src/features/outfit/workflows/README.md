@@ -19,13 +19,13 @@ server/features/api-gateway/       中转站链路地图
 
 | tab | workflowMode | 当前搜索词 | 目标目录 |
 | --- | --- | --- | --- |
-| 批量换装 | `outfit` | `DEFAULT_OUTFIT_PAGE_NAME`、`OUTFIT_DEFAULT_PROMPT`、`isOutfitWorkflow` | `outfit/` |
+| 换装（旧名：批量换装） | `outfit` | `DEFAULT_OUTFIT_PAGE_NAME`、`OUTFIT_DEFAULT_PROMPT`、`isOutfitWorkflow` | `outfit/` |
 | 批量姿态 | `pose-remix` | `DEFAULT_POSE_REMIX_PAGE_NAME`、`POSE_REMIX_DEFAULT_PROMPT`、`isPoseRemixWorkflow` | `pose-remix/` |
 | 批量换脸 | `face-swap` | `DEFAULT_FACE_SWAP_PAGE_NAME`、`FACE_SWAP_DEFAULT_PROMPT`、`isFaceSwapWorkflow` | `face-swap/` |
 | 固定背景 | `background-change` | `DEFAULT_BACKGROUND_CHANGE_PAGE_NAME`、`BACKGROUND_CHANGE_DEFAULT_PROMPT`、`isBackgroundChangeWorkflow` | `background-change/` |
 | 随机背景 | `random-background` | `DEFAULT_RANDOM_BACKGROUND_PAGE_NAME`、`RANDOM_BACKGROUND_DEFAULT_PROMPT`、`isRandomBackgroundWorkflow` | `random-background/` |
 | 批量改色 | `recolor` | `DEFAULT_RECOLOR_PAGE_NAME`、`RECOLOR_DEFAULT_PROMPT`、`isRecolorWorkflow` | `recolor/` |
-| 批量白底精修 | `white-refine` | `DEFAULT_WHITE_REFINE_PAGE_NAME`、`WHITE_REFINE_DEFAULT_PROMPT`、`isWhiteRefineWorkflow` | `white-refine/` |
+| 精修（旧名：批量白底图精修） | `white-refine` | `DEFAULT_WHITE_REFINE_PAGE_NAME`、`WHITE_REFINE_DEFAULT_PROMPT`、`isWhiteRefineWorkflow` | `white-refine/` |
 | 设计稿 | `design-draft` | `DEFAULT_DESIGN_DRAFT_PAGE_NAME`、`DESIGN_DRAFT_DEFAULT_PROMPT`、`isDesignDraftWorkflow` | `design-draft/` |
 | 批量扩图 | `outpaint` | `DEFAULT_OUTPAINT_PAGE_NAME`、`OUTPAINT_DEFAULT_PROMPT`、`isOutpaintWorkflow` | `outpaint/` |
 | 局部回贴 | `local-detail` | `DEFAULT_LOCAL_DETAIL_PAGE_NAME`、`LOCAL_DETAIL_DEFAULT_PROMPT`、`isLocalDetailWorkflow` | `local-detail/` |

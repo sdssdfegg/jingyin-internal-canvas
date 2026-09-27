@@ -1,8 +1,8 @@
-# 批量换装 workflow
+# 换装 workflow
 
 | 项 | 内容 |
 | --- | --- |
-| tab | 批量换装 |
+| tab | 换装（2026-09-26 前叫「批量换装」，旧名字仍作为别名识别并自动迁移） |
 | workflowMode | `outfit` |
 | 当前代码 | `src/outfit-workflow.jsx` |
 | 搜索词 | `DEFAULT_OUTFIT_PAGE_NAME`、`OUTFIT_DEFAULT_PROMPT`、`isOutfitWorkflow`、`outfitIntent` |

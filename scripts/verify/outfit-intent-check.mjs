@@ -46,10 +46,11 @@ function compiled(patch, options = {}) {
 
 // —— 1) 七种部位组合的目标句
 const combos = [
-  { parts: ["upper"], target: "让图1模特穿着图2的上装。", keep: "图1的下装和鞋子保持不变。" },
-  { parts: ["lower"], target: "让图1模特穿着图2的下装。", keep: "图1的上装和鞋子保持不变。" },
+  // 2026-09-26：鞋子不再写进"保持不变"（半身图没有鞋子）。
+  { parts: ["upper"], target: "让图1模特穿着图2的上装。", keep: "图1的下装保持不变。" },
+  { parts: ["lower"], target: "让图1模特穿着图2的下装。", keep: "图1的上装保持不变。" },
   { parts: ["shoes"], target: "让图1模特穿着图2的鞋子。", keep: "图1的上装和下装保持不变。" },
-  { parts: ["upper", "lower"], target: "让图1模特穿着图2的上装和下装。", keep: "图1的鞋子保持不变。" },
+  { parts: ["upper", "lower"], target: "让图1模特穿着图2的上装和下装。", keep: "" },
   { parts: ["upper", "shoes"], target: "让图1模特穿着图2的上装和鞋子。", keep: "图1的下装保持不变。" },
   { parts: ["lower", "shoes"], target: "让图1模特穿着图2的下装和鞋子。", keep: "图1的上装保持不变。" },
   { parts: ["upper", "lower", "shoes"], target: "让图1模特穿着图2的上装、下装和鞋子。", keep: "" }
@@ -81,10 +82,11 @@ check("内搭/外套/内搭+外套三种文字互不相同",
   new Set([layers.inner, layers.outer, layers["inner-outer"]]).size === 3);
 
 // —— 3b) 需求里给出的那条完整原文（纯正文，不带【】小标题；目标句排成一排）
+// 2026-09-26：鞋子不再出现（半身图没有鞋子），保持句里不含"鞋子"。
 const required = compiled({ parts: ["upper"], upperLayer: "inner-outer" });
-check("『内搭+外套、下装不变、鞋子不变』完整原文与需求一致",
+check("『内搭+外套、下装不变』完整原文与需求一致",
   required.prompt === [
-    "让图1模特穿着图2的内搭和外套。图1的下装和鞋子保持不变。",
+    "让图1模特穿着图2的内搭和外套。图1的下装保持不变。",
     "",
     "穿法跟随图2，不自行改变扣合、衣摆、袖子和领口状态。",
     "",
@@ -93,9 +95,12 @@ check("『内搭+外套、下装不变、鞋子不变』完整原文与需求一
   JSON.stringify(required.prompt));
 check("换装目标与保持句排成一排（中间不换行）",
   required.targets === "让图1模特穿着图2的内搭和外套。"
-    && required.keep === "图1的下装和鞋子保持不变。"
-    && required.prompt.split("\n")[0] === "让图1模特穿着图2的内搭和外套。图1的下装和鞋子保持不变。",
+    && required.keep === "图1的下装保持不变。"
+    && required.prompt.split("\n")[0] === "让图1模特穿着图2的内搭和外套。图1的下装保持不变。",
   required.prompt.split("\n")[0]);
+check("最终提示词里不再出现「鞋子保持不变」",
+  !required.prompt.includes("鞋子保持不变") && !compiled({ parts: ["upper"], upperLayer: "single" }).prompt.includes("鞋子"),
+  compiled({ parts: ["upper"], upperLayer: "single" }).keep);
 check("发给模型的最终提示词不含任何【】小标题",
   !/【[^】]*】/.test(required.prompt),
   required.prompt.slice(0, 60));
@@ -259,7 +264,7 @@ const okCheck = validateOutfitIntent(intent({ parts: ["upper", "lower"] }));
 check("合法意图校验通过", okCheck.ok === true, okCheck.errors.join(" / "));
 const summary = summarizeOutfitIntent(intent({ parts: ["upper"], upperLayer: "inner-outer" }));
 check("提交按钮摘要文案正确",
-  summary.replaceText === "内搭+外套" && summary.keepText === "下装、鞋子" && summary.wearingText === "跟随图2穿法",
+  summary.replaceText === "内搭+外套" && summary.keepText === "下装" && summary.wearingText === "跟随图2穿法",
   JSON.stringify(summary));
 
 // —— 10) 自动识别层级：由图2事实决定；识别不出来不瞎猜

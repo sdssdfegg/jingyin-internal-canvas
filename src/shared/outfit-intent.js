@@ -27,6 +27,8 @@ export const OUTFIT_PART_OPTIONS = Object.freeze([
   { value: "shoes", label: "鞋子", promptLabel: "鞋子" }
 ]);
 export const OUTFIT_PART_VALUES = Object.freeze(OUTFIT_PART_OPTIONS.map((item) => item.value));
+/** 会写进"保持不变"的部位：鞋子不算 —— 批量换装是半身图，画面里没有鞋子。 */
+export const OUTFIT_KEEP_PART_VALUES = Object.freeze(["upper", "lower"]);
 
 /** 上装层级（只在选择了上装时使用）。 */
 export const UPPER_LAYER_OPTIONS = Object.freeze([
@@ -427,14 +429,19 @@ export function outfitTargetText(intent) {
   return `让图1模特穿着图2的${joinChinese(phrases, "和")}。`;
 }
 
-/** 未选部位"保持不变"（三项全选时返回空串，不产生多余句子）。 */
+/** 未选部位"保持不变"（三项全选时返回空串，不产生多余句子）。
+ *
+ * 2026-09-26（按用户要求）：**鞋子不写进"保持不变"**。
+ * 批量换装走的是半身图，画面里根本没有鞋子，写"图1的鞋子保持不变"会让模型去补一双鞋。
+ * 所以保持句只在上装/下装之间取未选项；只选了鞋子时，保持句只写"图1的上装和下装保持不变。"。
+ */
 export function outfitKeepText(intent) {
   const normalized = normalizeOutfitIntent(intent);
-  const labels = OUTFIT_PART_VALUES
+  if (normalized.parts.length === 0) return "";
+  const labels = OUTFIT_KEEP_PART_VALUES
     .filter((part) => !normalized.parts.includes(part))
     .map((part) => partLabel(part));
   if (labels.length === 0) return "";
-  if (normalized.parts.length === 0) return "";
   return `图1的${joinChinese(labels, "和")}保持不变。`;
 }
 
@@ -564,7 +571,8 @@ export function summarizeOutfitIntent(intent) {
     ...OUTFIT_PART_VALUES.filter((part) => part !== "upper" && parts.includes(part)).map((part) => partLabel(part))
   ];
   const replaceText = phrases.length ? phrases.join("、") : "未选择";
-  const untouched = OUTFIT_PART_VALUES.filter((part) => !parts.includes(part));
+  // 保持列表同样不含鞋子（半身图没有鞋子，界面上也别显示"保持鞋子"）。
+  const untouched = OUTFIT_KEEP_PART_VALUES.filter((part) => !parts.includes(part));
   const keepText = untouched.length ? untouched.map((part) => partLabel(part)).join("、") : "无";
   const wearingText = WEARING_MODE_OPTIONS.find((item) => item.value === normalized.wearing.mode)?.label || "";
   return { replaceText, keepText, wearingText };
