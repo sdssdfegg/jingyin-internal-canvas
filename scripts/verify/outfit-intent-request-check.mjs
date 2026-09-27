@@ -164,7 +164,10 @@ try {
     { parts: ["upper", "lower"], target: "让图1模特穿着图2的上装和下装。", keep: "" },
     { parts: ["upper", "shoes"], target: "让图1模特穿着图2的上装和鞋子。", keep: "图1的下装保持不变。" },
     { parts: ["lower", "shoes"], target: "让图1模特穿着图2的下装和鞋子。", keep: "图1的上装保持不变。" },
-    { parts: ["upper", "lower", "shoes"], target: "让图1模特穿着图2的上装、下装和鞋子。", keep: "" }
+    { parts: ["upper", "lower", "shoes"], target: "让图1模特穿着图2的上装、下装和鞋子。", keep: "" },
+    // 2026-09-26 新增连衣裙：一件式，选了它就不再写"上装/下装保持不变"。
+    { parts: ["dress"], target: "让图1模特穿着图2的连衣裙。", keep: "" },
+    { parts: ["dress", "shoes"], target: "让图1模特穿着图2的连衣裙和鞋子。", keep: "" }
   ];
   for (const combo of combos) {
     const label = combo.parts.join("+");
@@ -270,6 +273,8 @@ try {
     { name: "非法部位", patch: { outfitIntent: intent({ parts: ["upper", "hat"] }) } },
     { name: "空部位", patch: { outfitIntent: intent({ parts: [] }) } },
     { name: "非法上装层级", patch: { outfitIntent: intent({ upperLayer: "大袄" }) } },
+    // 2026-09-26：「自动识别图2」已删除，旧客户端再传 auto 必须明确被拒。
+    { name: "已删除的 upperLayer=auto", patch: { outfitIntent: intent({ upperLayer: "auto" }) } },
     { name: "非法穿法模式", patch: { outfitIntent: intent({ wearing: { mode: "随缘", values: {} } }) } },
     { name: "非法穿法取值", patch: { outfitIntent: intent({ wearing: { mode: "custom", values: { closure: "半扣" } } }) } }
   ];

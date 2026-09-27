@@ -8,8 +8,11 @@
 // 用法：node scripts/verify/outfit-intent-check.mjs
 import process from "node:process";
 import {
+  DEFAULT_UPPER_LAYER,
   OUTFIT_AUTO_PROMPT_CHAR_LIMIT,
+  OUTFIT_PART_OPTIONS,
   OUTFIT_PERSON_BASELINE,
+  UPPER_LAYER_OPTIONS,
   compileOutfitPrompt,
   defaultOutfitIntent,
   normalizeOutfitIntent,
@@ -267,24 +270,54 @@ check("提交按钮摘要文案正确",
   summary.replaceText === "内搭+外套" && summary.keepText === "下装" && summary.wearingText === "跟随图2穿法",
   JSON.stringify(summary));
 
-// —— 10) 自动识别层级：由图2事实决定；识别不出来不瞎猜
-const autoInnerOuter = resolveUpperLayer(intent({ parts: ["upper"], upperLayer: "auto", facts: { category: "外套+内搭两层" } }));
-check("自动识别：事实有两层时判为内搭+外套",
-  autoInnerOuter.value === "inner-outer" && autoInnerOuter.uncertain === false, JSON.stringify(autoInnerOuter));
-const autoOuter = resolveUpperLayer(intent({ parts: ["upper"], upperLayer: "auto", facts: { category: "长款风衣" } }));
-check("自动识别：事实是外套时判为外套", autoOuter.value === "outer", JSON.stringify(autoOuter));
-const autoUnknown = resolveUpperLayer(intent({ parts: ["upper"], upperLayer: "auto", facts: {} }));
-check("自动识别：没有事实时不猜层级并标记不确定",
-  autoUnknown.uncertain === true && autoUnknown.resolvedBy === "fallback", JSON.stringify(autoUnknown));
-check("识别不确定时给出提示",
-  compiled({ parts: ["upper"], upperLayer: "auto" }).warnings.some((item) => /层级未识别/.test(item)),
-  compiled({ parts: ["upper"], upperLayer: "auto" }).warnings.join(" / "));
+// —— 10) 上装层级：2026-09-26 删掉「自动识别图2」，一律由用户选
+check("「自动识别图2」已从枚举里删除",
+  !UPPER_LAYER_OPTIONS.some((item) => item.value === "auto") && DEFAULT_UPPER_LAYER === "single",
+  UPPER_LAYER_OPTIONS.map((item) => item.value).join(","));
+check("旧存档里的 upperLayer=auto 安全归一到「仅一件上装」",
+  normalizeOutfitIntent({ parts: ["upper"], upperLayer: "auto" }).upperLayer === "single");
+check("层级按用户所选返回（不再看事实）",
+  resolveUpperLayer({ parts: ["upper"], upperLayer: "outer", facts: { category: "外套+内搭两层" } }).value === "outer"
+    && resolveUpperLayer({ parts: ["upper"], upperLayer: "inner-outer", facts: {} }).value === "inner-outer",
+  JSON.stringify(resolveUpperLayer({ parts: ["upper"], upperLayer: "inner-outer", facts: {} })));
+check("默认层级是 single（仅一件上装）",
+  defaultOutfitIntent().upperLayer === "single", defaultOutfitIntent().upperLayer);
 
 // —— 10b) 选了内搭+外套但事实只有一件 → 提示确认
 const mismatch = compiled({ parts: ["upper"], upperLayer: "inner-outer", facts: { category: "单件针织上衣" } });
 check("内搭+外套 与 图2只有一件 冲突时提示确认",
   mismatch.warnings.some((item) => /只识别到一件上装/.test(item)),
   mismatch.warnings.join(" / "));
+
+// —— 10c) 连衣裙：顺序、目标句、保持句
+check("更换部位顺序是 上装 / 下装 / 连衣裙 / 鞋子",
+  OUTFIT_PART_OPTIONS.map((item) => item.label).join("/") === "上装/下装/连衣裙/鞋子",
+  OUTFIT_PART_OPTIONS.map((item) => item.label).join("/"));
+check("只选连衣裙：目标句正确、没有保持句",
+  compiled({ parts: ["dress"] }).targets === "让图1模特穿着图2的连衣裙。"
+    && compiled({ parts: ["dress"] }).keep === "",
+  `${compiled({ parts: ["dress"] }).targets} | keep=${compiled({ parts: ["dress"] }).keep || "(空)"}`);
+check("连衣裙+鞋子：目标句并列、仍没有保持句（上装下装被连衣裙覆盖）",
+  compiled({ parts: ["dress", "shoes"] }).targets === "让图1模特穿着图2的连衣裙和鞋子。"
+    && compiled({ parts: ["dress", "shoes"] }).keep === "",
+  `${compiled({ parts: ["dress", "shoes"] }).targets} | keep=${compiled({ parts: ["dress", "shoes"] }).keep || "(空)"}`);
+check("上装+连衣裙：不写「下装保持不变」（连衣裙本身就是一件式）",
+  compiled({ parts: ["upper", "dress"] }).keep === "",
+  compiled({ parts: ["upper", "dress"] }).keep || "(空)");
+check("只选上装时仍然只提「下装保持不变」（鞋子不算）",
+  compiled({ parts: ["upper"] }).keep === "图1的下装保持不变。",
+  compiled({ parts: ["upper"] }).keep);
+check("摘要里的保持列表同样不含鞋子、不含被连衣裙覆盖的部位",
+  summarizeOutfitIntent(intent({ parts: ["upper"] })).keepText === "下装"
+    && summarizeOutfitIntent(intent({ parts: ["dress"] })).keepText === "无"
+    && summarizeOutfitIntent(intent({ parts: ["shoes"] })).keepText === "上装、下装",
+  `${summarizeOutfitIntent(intent({ parts: ["upper"] })).keepText} / ${summarizeOutfitIntent(intent({ parts: ["dress"] })).keepText} / ${summarizeOutfitIntent(intent({ parts: ["shoes"] })).keepText}`);
+check("连衣裙也会带上装/下装那种穿法字段（外套状态除外）",
+  (() => {
+    const keys = visibleWearingFields(intent({ parts: ["dress"] })).map((field) => field.key);
+    return keys.includes("sleeve") && keys.includes("collar") && keys.includes("lowerHem") && !keys.includes("outerState");
+  })(),
+  visibleWearingFields(intent({ parts: ["dress"] })).map((field) => field.key).join(","));
 
 // —— 11) 旧存档字段安全：旧 garmentComposition/garmentLengths 存在也不会覆盖新选择、不会抛错
 const legacy = normalizeOutfitIntent({
@@ -301,8 +334,15 @@ check("旧存档字段被安全忽略（不覆盖新意图、不抛错）",
   JSON.stringify(legacy.parts));
 check("旧 garmentComposition/garmentLengths 不再进入意图",
   !("garmentComposition" in legacy) && !("garmentLengths" in legacy) && !("masterFitSpec" in legacy));
-check("默认意图是未选任何部位",
-  defaultOutfitIntent().parts.length === 0 && defaultOutfitIntent().wearing.mode === "follow");
+check("默认意图默认就选中「上装」且层级是「仅一件上装」",
+  defaultOutfitIntent().parts.length === 1
+    && defaultOutfitIntent().parts[0] === "upper"
+    && defaultOutfitIntent().upperLayer === "single"
+    && defaultOutfitIntent().wearing.mode === "follow",
+  JSON.stringify({ parts: defaultOutfitIntent().parts, upperLayer: defaultOutfitIntent().upperLayer }));
+check("用户把部位全点掉（显式空数组）仍然保持为空，由「至少选一个」拦住",
+  normalizeOutfitIntent({ parts: [] }).parts.length === 0,
+  JSON.stringify(normalizeOutfitIntent({ parts: [] }).parts));
 
 // —— 12) 结构化对象不会变成 [object Object]
 const weird = compileOutfitPrompt({ intent: { parts: ["upper"], upperLayer: "single", facts: { category: { a: 1 } } } });

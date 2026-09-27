@@ -20,26 +20,28 @@
 // 1. 枚举（服务端校验与前端 UI 共用同一份，禁止在页面里另写一份字符串表）
 // ---------------------------------------------------------------------------
 
-/** 更换部位（多选，至少一个）。 */
+/** 更换部位（多选，至少一个）。2026-09-26：新增「连衣裙」，顺序为 上装 / 下装 / 连衣裙 / 鞋子。 */
 export const OUTFIT_PART_OPTIONS = Object.freeze([
   { value: "upper", label: "上装", promptLabel: "上装" },
   { value: "lower", label: "下装", promptLabel: "下装" },
+  { value: "dress", label: "连衣裙", promptLabel: "连衣裙" },
   { value: "shoes", label: "鞋子", promptLabel: "鞋子" }
 ]);
 export const OUTFIT_PART_VALUES = Object.freeze(OUTFIT_PART_OPTIONS.map((item) => item.value));
+/** 默认更换部位：上装（用户要求默认就选上装，不用先手动点一下）。 */
+export const DEFAULT_OUTFIT_PARTS = Object.freeze(["upper"]);
 /** 会写进"保持不变"的部位：鞋子不算 —— 批量换装是半身图，画面里没有鞋子。 */
 export const OUTFIT_KEEP_PART_VALUES = Object.freeze(["upper", "lower"]);
 
-/** 上装层级（只在选择了上装时使用）。 */
+/** 上装层级（只在选择了上装时使用）。2026-09-26：删掉「自动识别图2」，默认「仅一件上装」。 */
 export const UPPER_LAYER_OPTIONS = Object.freeze([
-  { value: "auto", label: "自动识别图2", promptLabel: "上装" },
   { value: "single", label: "仅一件上装", promptLabel: "上装" },
   { value: "inner", label: "仅内搭", promptLabel: "内搭" },
   { value: "outer", label: "仅外套", promptLabel: "外套" },
   { value: "inner-outer", label: "内搭+外套", promptLabel: "内搭和外套" }
 ]);
 export const UPPER_LAYER_VALUES = Object.freeze(UPPER_LAYER_OPTIONS.map((item) => item.value));
-export const DEFAULT_UPPER_LAYER = "auto";
+export const DEFAULT_UPPER_LAYER = "single";
 
 /**
  * 穿法字段。
@@ -53,7 +55,7 @@ export const WEARING_FIELDS = Object.freeze([
   {
     key: "closure",
     label: "扣合状态",
-    parts: Object.freeze(["upper"]),
+    parts: Object.freeze(["upper", "dress"]),
     needs: "closure",
     options: Object.freeze([
       { value: "full", label: "全扣", prompt: "门襟全扣" },
@@ -68,7 +70,7 @@ export const WEARING_FIELDS = Object.freeze([
   {
     key: "outerState",
     label: "外套状态",
-    parts: Object.freeze(["upper"]),
+    parts: Object.freeze(["upper", "dress"]),
     needs: "outer",
     options: Object.freeze([
       { value: "open", label: "敞开", prompt: "外套敞开不系扣" },
@@ -79,7 +81,7 @@ export const WEARING_FIELDS = Object.freeze([
   {
     key: "hem",
     label: "衣摆",
-    parts: Object.freeze(["upper"]),
+    parts: Object.freeze(["upper", "dress"]),
     options: Object.freeze([
       { value: "out", label: "自然放出", prompt: "衣摆自然放出" },
       { value: "tucked", label: "全部扎入", prompt: "衣摆全部扎入下装" },
@@ -89,7 +91,7 @@ export const WEARING_FIELDS = Object.freeze([
   {
     key: "sleeve",
     label: "袖子",
-    parts: Object.freeze(["upper"]),
+    parts: Object.freeze(["upper", "dress"]),
     options: Object.freeze([
       { value: "down", label: "自然放下", prompt: "袖子自然放下" },
       { value: "rolled", label: "卷起", prompt: "袖子卷起" },
@@ -101,7 +103,7 @@ export const WEARING_FIELDS = Object.freeze([
   {
     key: "collar",
     label: "衣领",
-    parts: Object.freeze(["upper"]),
+    parts: Object.freeze(["upper", "dress"]),
     options: Object.freeze([
       { value: "flat", label: "自然平放", prompt: "衣领自然平放" },
       { value: "stand", label: "立领", prompt: "衣领立起" },
@@ -112,7 +114,7 @@ export const WEARING_FIELDS = Object.freeze([
   {
     key: "fit",
     label: "版型",
-    parts: Object.freeze(["upper"]),
+    parts: Object.freeze(["upper", "dress"]),
     options: Object.freeze([
       { value: "follow", label: "跟随图2", prompt: "版型跟随图2" },
       { value: "loose", label: "宽松", prompt: "版型宽松" },
@@ -123,7 +125,7 @@ export const WEARING_FIELDS = Object.freeze([
   {
     key: "waistband",
     label: "腰头",
-    parts: Object.freeze(["lower"]),
+    parts: Object.freeze(["lower", "dress"]),
     options: Object.freeze([
       { value: "follow", label: "跟随图2", prompt: "腰头位置跟随图2" },
       { value: "high", label: "高腰", prompt: "下装为高腰" },
@@ -134,7 +136,7 @@ export const WEARING_FIELDS = Object.freeze([
   {
     key: "lowerHem",
     label: "裤脚/裙摆",
-    parts: Object.freeze(["lower"]),
+    parts: Object.freeze(["lower", "dress"]),
     options: Object.freeze([
       { value: "follow", label: "跟随图2", prompt: "裤脚或裙摆跟随图2" },
       { value: "straight", label: "直筒", prompt: "裤脚直筒" },
@@ -161,18 +163,19 @@ export const DEFAULT_WEARING_MODE = "follow";
  * （见 server/outfit-master-fit-ai.js 的 outputSchema 与 normalize 逻辑），这里不再接受这些字段。
  */
 export const OUTFIT_FACT_FIELDS = Object.freeze([
-  { key: "category", label: "类别与内外层", parts: Object.freeze(["upper"]) },
-  { key: "color", label: "颜色", parts: Object.freeze(["upper", "lower", "shoes"]) },
-  { key: "material", label: "材质纹理", parts: Object.freeze(["upper", "lower", "shoes"]) },
-  { key: "silhouette", label: "版型", parts: Object.freeze(["upper", "lower"]) },
-  { key: "length", label: "长度", parts: Object.freeze(["upper", "lower"]) },
-  { key: "collarSleeve", label: "领口与袖长", parts: Object.freeze(["upper"]) },
-  { key: "sleeveState", label: "袖子状态", parts: Object.freeze(["upper"]) },
-  { key: "closure", label: "扣子/拉链", parts: Object.freeze(["upper"]) },
-  { key: "hem", label: "衣摆扎入", parts: Object.freeze(["upper"]) },
-  { key: "lowerType", label: "裤型/裙型", parts: Object.freeze(["lower"]) },
+  // 2026-09-26：连衣裙按"一件式上下装"对待，上装/下装能看到的事实字段它都能看到。
+  { key: "category", label: "类别与内外层", parts: Object.freeze(["upper", "dress"]) },
+  { key: "color", label: "颜色", parts: Object.freeze(["upper", "lower", "dress", "shoes"]) },
+  { key: "material", label: "材质纹理", parts: Object.freeze(["upper", "lower", "dress", "shoes"]) },
+  { key: "silhouette", label: "版型", parts: Object.freeze(["upper", "lower", "dress"]) },
+  { key: "length", label: "长度", parts: Object.freeze(["upper", "lower", "dress"]) },
+  { key: "collarSleeve", label: "领口与袖长", parts: Object.freeze(["upper", "dress"]) },
+  { key: "sleeveState", label: "袖子状态", parts: Object.freeze(["upper", "dress"]) },
+  { key: "closure", label: "扣子/拉链", parts: Object.freeze(["upper", "dress"]) },
+  { key: "hem", label: "衣摆扎入", parts: Object.freeze(["upper", "dress"]) },
+  { key: "lowerType", label: "裤型/裙型", parts: Object.freeze(["lower", "dress"]) },
   { key: "shoeType", label: "鞋型", parts: Object.freeze(["shoes"]) },
-  { key: "structure", label: "明显结构", parts: Object.freeze(["upper", "lower", "shoes"]) }
+  { key: "structure", label: "明显结构", parts: Object.freeze(["upper", "lower", "dress", "shoes"]) }
 ]);
 export const OUTFIT_FACT_KEYS = Object.freeze(OUTFIT_FACT_FIELDS.map((item) => item.key));
 
@@ -233,7 +236,11 @@ export function normalizeOutfitFacts(value) {
  */
 export function normalizeOutfitIntent(value) {
   const source = value && typeof value === "object" ? value : {};
-  const parts = normalizeOutfitParts(source.parts);
+  // 2026-09-26：没存过 parts（旧存档 / 新页面）→ 默认「上装」；
+  // 明确存成空数组（用户自己把部位全点掉）→ 保持为空，交给"至少选一个"的校验拦。
+  const parts = source.parts === undefined || source.parts === null
+    ? [...DEFAULT_OUTFIT_PARTS]
+    : normalizeOutfitParts(source.parts);
   const wearingSource = source.wearing && typeof source.wearing === "object" ? source.wearing : {};
   const wearing = {
     mode: pickEnum(wearingSource.mode, WEARING_MODE_VALUES, DEFAULT_WEARING_MODE),
@@ -258,9 +265,9 @@ export function normalizeOutfitIntent(value) {
   };
 }
 
-/** 默认意图：不选任何部位（强制用户先做选择）。 */
+/** 默认意图：默认就选中「上装」（用户要求），层级默认「仅一件上装」。 */
 export function defaultOutfitIntent() {
-  return normalizeOutfitIntent({});
+  return normalizeOutfitIntent({ parts: DEFAULT_OUTFIT_PARTS });
 }
 
 /** 事实里已经识别出来的字段（值为空或"未识别"的算未识别）。 */
@@ -341,33 +348,27 @@ export function validateOutfitIntent(value) {
 // 4. 上装层级解析（自动识别只能由图2事实决定；不确定时标记出来，绝不偷偷猜）
 // ---------------------------------------------------------------------------
 
+// 只保留"内搭+外套"判断：2026-09-26 删掉「自动识别图2」之后，层级不再由事实推断，
+// 这个 pattern 只用于"用户选了内搭+外套、但图2事实看起来只有一件"的提醒。
 const INNER_OUTER_PATTERN = /内搭.{0,6}外套|外套.{0,6}内搭|两件|叠穿|里外两层|内层.{0,4}外层|外层.{0,4}内层/;
-const OUTER_PATTERN = /外套|大衣|风衣|夹克|开衫|西服|西装|马甲|派克|羽绒/;
-const INNER_PATTERN = /内搭|打底|衬衫|衬衣|T恤|t恤|针织|毛衣|卫衣|背心|吊带/;
-const SINGLE_PATTERN = /单件|一件|连衣裙|上衣|上装|衬衫裙/;
 
 /**
  * @returns {{value: string, promptLabel: string, resolvedBy: "user"|"facts"|"fallback", uncertain: boolean}}
  */
+/**
+ * 上装层级：2026-09-26 起没有「自动识别图2」，一律由用户选，所以直接返回所选值。
+ * 保留 `uncertain`（选了"内搭+外套"但图2事实只看到一件上装时用于界面提示）。
+ */
 export function resolveUpperLayer(intent) {
   const normalized = normalizeOutfitIntent(intent);
   const option = UPPER_LAYER_OPTIONS.find((item) => item.value === normalized.upperLayer) || UPPER_LAYER_OPTIONS[0];
-  if (normalized.upperLayer !== "auto") {
-    return { value: option.value, promptLabel: option.promptLabel, resolvedBy: "user", uncertain: false };
-  }
   const factsText = [normalized.facts.category, normalized.facts.structure, normalized.facts.closure]
     .map((item) => asText(item, 200))
     .filter(Boolean)
     .join(" ");
   const recognized = factsText && !/^未识别/.test(factsText);
-  if (recognized) {
-    if (INNER_OUTER_PATTERN.test(factsText)) return { value: "inner-outer", promptLabel: "内搭和外套", resolvedBy: "facts", uncertain: false };
-    if (OUTER_PATTERN.test(factsText)) return { value: "outer", promptLabel: "外套", resolvedBy: "facts", uncertain: false };
-    if (INNER_PATTERN.test(factsText)) return { value: "inner", promptLabel: "内搭", resolvedBy: "facts", uncertain: false };
-    if (SINGLE_PATTERN.test(factsText)) return { value: "single", promptLabel: "上装", resolvedBy: "facts", uncertain: false };
-  }
-  // 识别不出来：用中性说法，并把"不确定"交给界面提示用户去选，不在这里瞎猜内搭/外套。
-  return { value: "single", promptLabel: "上装", resolvedBy: "fallback", uncertain: true };
+  const uncertain = option.value === "inner-outer" && Boolean(recognized) && !INNER_OUTER_PATTERN.test(factsText);
+  return { value: option.value, promptLabel: option.promptLabel, resolvedBy: "user", uncertain };
 }
 
 /**
@@ -431,15 +432,19 @@ export function outfitTargetText(intent) {
 
 /** 未选部位"保持不变"（三项全选时返回空串，不产生多余句子）。
  *
- * 2026-09-26（按用户要求）：**鞋子不写进"保持不变"**。
- * 批量换装走的是半身图，画面里根本没有鞋子，写"图1的鞋子保持不变"会让模型去补一双鞋。
- * 所以保持句只在上装/下装之间取未选项；只选了鞋子时，保持句只写"图1的上装和下装保持不变。"。
+ * 2026-09-26 两条口径：
+ *   1. **鞋子不写进"保持不变"**：批量换装走的是半身图，画面里根本没有鞋子，
+ *      写"图1的鞋子保持不变"会让模型去补一双鞋；
+ *   2. **选了连衣裙时，上装/下装都不再写"保持不变"**：连衣裙本身就是一件式上下装，
+ *      再说"上装/下装保持不变"自相矛盾。只选了连衣裙 → 没有保持句。
  */
 export function outfitKeepText(intent) {
   const normalized = normalizeOutfitIntent(intent);
   if (normalized.parts.length === 0) return "";
+  const dressSelected = normalized.parts.includes("dress");
   const labels = OUTFIT_KEEP_PART_VALUES
     .filter((part) => !normalized.parts.includes(part))
+    .filter((part) => !(dressSelected && (part === "upper" || part === "lower")))
     .map((part) => partLabel(part));
   if (labels.length === 0) return "";
   return `图1的${joinChinese(labels, "和")}保持不变。`;
@@ -571,8 +576,11 @@ export function summarizeOutfitIntent(intent) {
     ...OUTFIT_PART_VALUES.filter((part) => part !== "upper" && parts.includes(part)).map((part) => partLabel(part))
   ];
   const replaceText = phrases.length ? phrases.join("、") : "未选择";
-  // 保持列表同样不含鞋子（半身图没有鞋子，界面上也别显示"保持鞋子"）。
-  const untouched = OUTFIT_KEEP_PART_VALUES.filter((part) => !parts.includes(part));
+  // 保持列表同样不含鞋子；选了连衣裙时也不再列上装/下装（见 outfitKeepText 的口径）。
+  const dressSelected = parts.includes("dress");
+  const untouched = OUTFIT_KEEP_PART_VALUES
+    .filter((part) => !parts.includes(part))
+    .filter((part) => !(dressSelected && (part === "upper" || part === "lower")));
   const keepText = untouched.length ? untouched.map((part) => partLabel(part)).join("、") : "无";
   const wearingText = WEARING_MODE_OPTIONS.find((item) => item.value === normalized.wearing.mode)?.label || "";
   return { replaceText, keepText, wearingText };

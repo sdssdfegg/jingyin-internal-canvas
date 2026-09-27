@@ -86,6 +86,7 @@ import {
   FACT_UNRECOGNIZED,
   OUTFIT_AUTO_PROMPT_CHAR_LIMIT,
   OUTFIT_FACT_FIELDS,
+  OUTFIT_KEEP_PART_VALUES,
   OUTFIT_PART_OPTIONS,
   UPPER_LAYER_OPTIONS,
   WEARING_MODE_OPTIONS,
@@ -394,7 +395,9 @@ const WHITE_REFINE_COLOR_LOCK_LEGACY_DEFAULT_PROMPT = [
   "图2如果上传，只作为参考池：可以帮助理解标准平铺形态、袖口/腰带/扣子/面料细节或衣架去除后的自然补齐方式；不能把图2款式、颜色、图案、背景或新结构迁移到图1。",
   "最终输出高清白底服装商品图，无模特、无人台、无衣架、无文字、水印、标签说明或拼贴对比图。"
 ].join("\n");
-const WHITE_REFINE_DEFAULT_PROMPT = [
+// 2026-09-26 改「多图生图」之前的那一版精修默认词（8 行"批量…"版）。
+// 只用于把还停在旧默认词上的页面迁移到新默认词；用户自己改过的提示词不会被覆盖。
+const WHITE_REFINE_BATCH_LEGACY_DEFAULT_PROMPT = [
   "批量白底精修服装任务：图1上传区是批量要处理的服装平铺图/挂拍图，图2上传区是可选参考/细节图，本页不使用图3。",
   "目标是把图1处理成干净白底电商商品图：去掉原背景、衣架、挂钩、夹子、图钉、别针、固定针、支撑物、杂乱阴影、脏点和多余道具，让服装平铺/挂拍形态更规整自然。",
   "只允许做白底清理、衣架去除、边缘修净、轻度版面摆正、压痕和杂乱褶皱整理；去掉运输压痕、固定造成的尖锐折痕和多余皱团，但保留服装结构需要的自然垂感、缝线边缘和面料纹理。",
@@ -403,6 +406,20 @@ const WHITE_REFINE_DEFAULT_PROMPT = [
   "白底可以变干净，但服装本体不能被重新渲染成新商品图；只能用同一件服装附近纹理补齐被衣架、夹子、图钉、别针遮挡的位置，不能新增口袋、压线、洗水纹、褶皱纹理或改变原本水洗分布。",
   "图2如果上传，只作为参考池：可以帮助理解标准平铺形态、袖口/腰带/扣子等局部细节或衣架去除后的自然补齐方式；不能把图2款式、颜色、图案、背景或新结构迁移到图1。",
   "最终输出高清白底服装商品图，无模特、无人台、无衣架、无挂钩、无夹子、无图钉、无别针、无固定针、无文字、水印、标签说明或拼贴对比图。"
+].join("\n");
+// 2026-09-26（按用户描述重写）：精修改成「多图生图」——
+// 图1、图2 … 图N 是同一件服装的多张素材，一次全部上传，点生成只输出一张白底成品图。
+// 除输入方式外，其余硬约束（颜色保真、不改结构、去衣架/道具、不加滤镜锐化）全部保留。
+const WHITE_REFINE_DEFAULT_PROMPT = [
+  "白底精修任务（多图生图）：图1、图2……图N 是**同一件服装**的多张素材，可能是正面、背面、侧面、平铺、挂拍或局部细节，一次全部上传即可。",
+  "点击生成只输出**一张**白底精修成品图：把这几张素材里的同一件服装综合成一张干净商品图；不要输出多张、不要左右拼贴、不要分格、不要做对比图或说明图。",
+  "不同素材之间只做信息互补（背面补正面看不到的结构，细节图补领口/袖口/扣子/面料），不能把某张素材的背景、道具、阴影、模特、衣架或另一件服装的部件拼进成品。",
+  "目标是把这件服装处理成干净白底电商商品图：去掉原背景、衣架、挂钩、夹子、图钉、别针、固定针、支撑物、杂乱阴影、脏点和多余道具，让平铺/挂拍形态规整自然。",
+  "只允许做白底清理、衣架去除、边缘修净、轻度版面摆正、压痕和杂乱褶皱整理；去掉运输压痕、固定造成的尖锐折痕和多余皱团，但保留服装结构需要的自然垂感、缝线边缘和面料纹理。",
+  "这件服装是唯一主事实：颜色深浅、明度、饱和度、灰度、白位黑位、版型、长度、领口、袖口、袖克夫、扣子、拉链、腰带、口袋、刺绣、印花、压线、拼接、面料材质和全部可见细节都不能改变。",
+  "颜色校准以素材原服装为准，尤其牛仔、水洗、做旧、针织、皮革、雪纺等面料必须保持原始色阶：不要提蓝、提饱和、加深颜色、提高对比度、增加油润感、高光、锐化、商业滤镜或自动美化。",
+  "白底可以变干净，但服装本体不能被重新渲染成新商品图；只能用同一件服装附近纹理补齐被衣架、夹子、图钉、别针遮挡的位置，不能新增口袋、压线、洗水纹、褶皱纹理或改变原本水洗分布。",
+  "最终输出一张高清白底服装商品图，无模特、无人台、无衣架、无挂钩、无夹子、无图钉、无别针、无固定针、无文字、水印、标签说明或拼贴对比图。"
 ].join("\n");
 const DESIGN_DRAFT_DEFAULT_PROMPT = [
   "参考图1上传区的实拍服装图或真人实拍服装图，将服装转换为图2上传区所参考的干净服装设计师手稿风格。图1上传区可能只有一张图，也可能有多张正面、背面、侧面或细节图；请把图1上传区的所有图片当作同一件服装的参考，综合识别服装颜色、版型、领口、袖型、袖口、下摆、长度比例、结构线、拼接方式和主要面料特点。图3上传区是可选的细节补充图，只有上传时才作为面料、袖口、裙摆、衣领、纹理或辅助线效果的补充参考；如果图3没有上传，不要强行假设图3内容。",
@@ -599,7 +616,8 @@ const RECOLOR_UPLOAD_LABELS = {
     hint: "可选；补充颜色禁忌、局部材质、客户要求或要避免的效果，不上传时不强行添加。"
   }
 };
-const WHITE_REFINE_UPLOAD_LABELS = {
+// 2026-09-26 改「多图生图」之前的精修上传区标题（只用于把还停在旧标题上的页面迁移过来）。
+const LEGACY_WHITE_REFINE_UPLOAD_LABELS = {
   model: {
     title: "批量平铺图/挂拍图",
     hint: "批量上传要变白底并精修的服装图；图1款式、颜色、面料和全部细节是唯一主事实。"
@@ -607,6 +625,22 @@ const WHITE_REFINE_UPLOAD_LABELS = {
   clothing: {
     title: "可选参考/细节图",
     hint: "可选上传标准平铺、袖口腰带扣子等细节或衣架去除参考；只辅助精修，不覆盖图1款式颜色。"
+  },
+  reference: {
+    title: "不参与",
+    hint: "白底精修不使用图3，补充要求请写在文字里。"
+  }
+};
+const WHITE_REFINE_UPLOAD_LABELS = {
+  model: {
+    // 2026-09-26（按用户要求）：从「批量…」改成「多图生图」——
+    // 一次可以上传同一件服装的多张素材，但点一次生成只出一张成品图。
+    title: "多图生图（图1~图N）",
+    hint: "同一件服装可以一次上传多张（正面/背面/侧面/细节/挂拍）；点生成只输出一张白底精修成品图。"
+  },
+  clothing: {
+    title: "补充素材（图N+1…）",
+    hint: "继续补充同一件服装的其它角度或细节；和多图生图里的图一起合成同一张成品，不作为单独款式。"
   },
   reference: {
     title: "不参与",
@@ -1317,6 +1351,7 @@ function makeOutfitPage(name = DEFAULT_OUTFIT_PAGE_NAME, patch = {}) {
       || sourcePrompt === RECOLOR_DEFAULT_PROMPT
       || sourcePrompt === BACKGROUND_CHANGE_DEFAULT_PROMPT
       || sourcePrompt === WHITE_REFINE_COLOR_LOCK_LEGACY_DEFAULT_PROMPT
+      || sourcePrompt === WHITE_REFINE_BATCH_LEGACY_DEFAULT_PROMPT
     )
       ? { ...sourceSettings, prompt: WHITE_REFINE_DEFAULT_PROMPT, productNote: "", smartIntervention: false, pairingMode: "fixed" }
     : pageMode === "pose-remix"
@@ -1360,6 +1395,14 @@ function makeOutfitPage(name = DEFAULT_OUTFIT_PAGE_NAME, patch = {}) {
         || uploadLabelsMatchPreset(sourceUploadLabels, BACKGROUND_CHANGE_UPLOAD_LABELS)
       )
         ? RECOLOR_UPLOAD_LABELS
+      : pageMode === "white-refine" && (
+        // 2026-09-26：精修改成「多图生图」，图1/图2 的标题跟着换。
+        // 只在标题还是旧默认值时迁移；用户自己改过的标题不动。
+        !patch.uploadLabels
+        || uploadLabelsMatchPreset(sourceUploadLabels, LEGACY_WHITE_REFINE_UPLOAD_LABELS)
+        || uploadLabelsMatchPreset(sourceUploadLabels, DEFAULT_UPLOAD_LABELS)
+      )
+        ? WHITE_REFINE_UPLOAD_LABELS
       : pageMode === "local-detail" && (
         !patch.uploadLabels
         || uploadLabelsMatchPreset(sourceUploadLabels, CUSTOM_UPLOAD_LABELS)
@@ -7202,16 +7245,20 @@ export default function OutfitWorkflow({
   const galleryZoomPercent = Math.round(galleryZoom * 100);
   const galleryCardMin = Math.round(176 * galleryZoom);
   const generationCount = normalizeGenerationCount(settings.generationCount);
-  const plannedGenerationCount = generationCount === "auto"
-    ? Math.min(
-        isDesignDraftWorkflow
-          ? Math.max(1, activeClothes.length)
-          : isPoseRemixWorkflow
-            ? Math.max(1, activeModels.length)
-            : activeModels.length,
-        outfitMaxImages
-      )
-    : generationCount;
+  // 2026-09-26（按用户要求）：精修是「多图生图」——图1、图2…图N 一起上传，
+  // 点一次生成**只出一张**成品图，所以这一页的计划数量恒为 1，不再跟生成数量走。
+  const plannedGenerationCount = isWhiteRefineWorkflow
+    ? 1
+    : generationCount === "auto"
+      ? Math.min(
+          isDesignDraftWorkflow
+            ? Math.max(1, activeClothes.length)
+            : isPoseRemixWorkflow
+              ? Math.max(1, activeModels.length)
+              : activeModels.length,
+          outfitMaxImages
+        )
+      : generationCount;
   const topbarStatus = runningCount > 0 ? "running" : failedCount > 0 ? "failed" : detachedCount > 0 ? "detached" : completedCount > 0 ? "success" : "idle";
   const topbarStatusText = runningCount > 0
     ? `生成中 ${runningCount}/${tasks.length}`
@@ -9454,7 +9501,8 @@ function buildTasks(countOverride = plannedGenerationCount) {
     const outpaintReferenceItems = [];
     return Array.from({ length: count }, (_, index) => {
       const modelItem = isDesignDraftWorkflow ? activeModels[0] : modelForIndex(index);
-      const extraModelItems = isDesignDraftWorkflow ? activeModels.slice(1) : [];
+      // 设计稿与精修都是「多图进、一张出」：图1 的其余几张要作为图2…图N 一起带上去。
+      const extraModelItems = isDesignDraftWorkflow || isWhiteRefineWorkflow ? activeModels.slice(1) : [];
       const clothingItem = isOutpaintWorkflow || isRandomBackgroundWorkflow ? null : clothingForIndex(index);
       const extraClothingItems = isRecolorWorkflow || isWhiteRefineWorkflow
         ? activeClothes.filter((item) => item.id !== clothingItem?.id)
@@ -9479,7 +9527,7 @@ function buildTasks(countOverride = plannedGenerationCount) {
         workflowMode,
         pageName: activeOutfitPage.name,
         uploadLabels,
-        modelImageCount: isDesignDraftWorkflow ? activeModels.length : 1,
+        modelImageCount: isDesignDraftWorkflow || isWhiteRefineWorkflow ? activeModels.length : 1,
         status: "queued",
         error: "",
         result: null,
@@ -9686,7 +9734,8 @@ function buildTasks(countOverride = plannedGenerationCount) {
     if (taskIsOutpaint && outpaintUploadMeta?.maskFile instanceof File) {
       form.append("mask", outpaintUploadMeta.maskFile, `mask_${task.order}_${task.modelItem.name}`);
     }
-    if (taskWorkflowMode === "design-draft") {
+    // 设计稿 / 精修：图1 上传区可能有多张（精修是「多图生图」），其余几张按 图2…图N 一起发上去。
+    if (taskWorkflowMode === "design-draft" || taskIsWhiteRefine) {
       (task.extraModelItems || []).forEach((item, index) => {
         const file = imageItemUploadFile(item);
         if (file instanceof Blob) form.append("image", file, `model_ref_${index + 2}_${item.name}`);
@@ -10343,12 +10392,14 @@ function buildTasks(countOverride = plannedGenerationCount) {
   // 顶层切换和「上装长度 / 下装长度」已删除，长度只作为图2事实被分析出来，不再做成长短按钮。
   function renderOutfitIntentPanel() {
     const parts = outfitIntent.parts;
-    const keepLabels = OUTFIT_PART_OPTIONS.filter((part) => !parts.includes(part.value)).map((part) => part.label).join("、");
-    const layerHint = outfitIntent.upperLayer === "auto"
-      ? outfitLayer.resolvedBy === "facts"
-        ? `按图2事实判定为「${outfitLayer.promptLabel}」`
-        : "还没识别出层级，请在下面手动选择（自动识别不会替你猜内搭/外套）"
-      : `将写作「图2的${outfitLayer.promptLabel}」`;
+    // 保持列表口径与编译器一致：不含鞋子；选了连衣裙时也不列上装/下装。
+    const keepLabels = OUTFIT_KEEP_PART_VALUES
+      .filter((part) => !parts.includes(part))
+      .filter((part) => !(parts.includes("dress") && (part === "upper" || part === "lower")))
+      .map((part) => OUTFIT_PART_OPTIONS.find((item) => item.value === part)?.label || part)
+      .join("、");
+    // 2026-09-26：删掉「自动识别图2」后，层级一律由用户选，这里只说"会怎么写"。
+    const layerHint = `将写作「图2的${outfitLayer.promptLabel}」`;
     return (
       <section className="outfitIntentPanel" aria-label="换装设置">
         <header>
@@ -10405,7 +10456,7 @@ function buildTasks(countOverride = plannedGenerationCount) {
                 );
               })}
             </div>
-            <small className={outfitLayer.uncertain && outfitIntent.upperLayer === "auto" ? "outfitIntentWarn" : ""}>{layerHint}</small>
+            <small className={outfitLayer.uncertain ? "outfitIntentWarn" : ""}>{layerHint}</small>
           </div>
         )}
 
