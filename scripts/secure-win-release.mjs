@@ -1,5 +1,6 @@
 import JavaScriptObfuscator from "javascript-obfuscator";
 import { build as esbuild } from "esbuild";
+import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -9,14 +10,26 @@ import { fileURLToPath } from "node:url";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const buildDir = path.join(rootDir, ".secure-build");
 const releaseParentDir = path.resolve(rootDir, "..");
-const defaultReleaseDir = path.join(releaseParentDir, "静音AI绘画-WIN（V11）");
+// 发布身份（可配置，默认就是本次要发的这一版）。
+// 换版本号/产品名只改环境变量即可，不用动脚本：
+//   JINGYIN_WIN_RELEASE_NAME / JINGYIN_WIN_PRODUCT_NAME / JINGYIN_WIN_PRODUCT_VERSION
+const releaseName = String(process.env.JINGYIN_WIN_RELEASE_NAME || "静音AI画板（v3.6）").trim();
+const productName = String(process.env.JINGYIN_WIN_PRODUCT_NAME || "静音AI画板").trim();
+const productVersion = String(process.env.JINGYIN_WIN_PRODUCT_VERSION || "3.6.0").trim();
+const defaultReleaseDir = path.join(releaseParentDir, releaseName);
 const releaseDir = path.resolve(process.env.JINGYIN_WIN_RELEASE_DIR || defaultReleaseDir);
-const exeName = "静音AI绘画.exe";
+const exeName = `${productName}.exe`;
 const releaseExe = path.join(releaseDir, exeName);
 const iconFile = path.join(rootDir, "public", "app-avatar.ico");
-const npmCommand = process.platform === "win32"
-  ? path.join(path.dirname(process.execPath), "npm.cmd")
-  : "npm";
+// npm 调用方式：优先用 node 同目录的 npm.cmd；便携 node（runtime/node）旁边没有 npm.cmd 时，
+// 回退到仓库自带的便携 npm-cli.js，避免打包第一步就找不到 npm。
+const siblingNpm = path.join(path.dirname(process.execPath), "npm.cmd");
+const portableNpmCli = path.join(rootDir, "runtime", "npm", "package", "bin", "npm-cli.js");
+const npmInvocation = process.platform !== "win32"
+  ? { command: "npm", prefix: [] }
+  : existsSync(siblingNpm)
+    ? { command: siblingNpm, prefix: [] }
+    : { command: process.execPath, prefix: [portableNpmCli] };
 const rceditCommand = process.platform === "win32"
   ? path.join(rootDir, "node_modules", "rcedit", "bin", process.arch === "x64" ? "rcedit-x64.exe" : "rcedit.exe")
   : localBin("rcedit");
@@ -89,11 +102,19 @@ ensureInsideRoot(buildDir, rootDir);
 ensureChildPath(releaseDir, releaseParentDir);
 await rm(buildDir, { recursive: true, force: true });
 await rm(releaseDir, { recursive: true, force: true });
+// 2026-09-27：**必须先清空 dist**。实测 vite build 在部分配置下不会清 dist，
+// 于是历史产物（一次一个 index-<hash>.js）会越积越多：上一次打包时 dist 里躺着 29 个
+// 旧 bundle（每个 ~2MB），混淆 + 内嵌 29 份会让 javascript-obfuscator 内存爆掉
+// （报 charenc md5 的 RangeError: Invalid array length），而且会把一堆过期前端一起打进安装包。
+// 发布包只允许包含"这一次构建"的前端资源。
+const distDir = path.join(rootDir, "dist");
+ensureInsideRoot(distDir, rootDir);
+await rm(distDir, { recursive: true, force: true });
 await mkdir(buildDir, { recursive: true });
 await mkdir(releaseDir, { recursive: true });
 
 console.log("1/8 Build frontend in public release mode");
-await run(npmCommand, ["run", "build"], {
+await run(npmInvocation.command, [...npmInvocation.prefix, "run", "build"], {
   env: {
     NODE_ENV: "production",
     VITE_JINGYIN_PUBLIC_RELEASE: "1",
@@ -182,14 +203,27 @@ if (process.platform === "win32") {
     iconFile,
     "--set-version-string",
     "FileDescription",
-    "静音AI绘画",
+    productName,
     "--set-version-string",
     "ProductName",
-    "静音AI绘画",
+    productName,
+    // 复制 node.exe 会带过来 Node.js 的公司名/原始文件名，发布包必须换成自己的，否则"属性"里露馅。
+    "--set-version-string",
+    "CompanyName",
+    "静音AI",
+    "--set-version-string",
+    "InternalName",
+    productName,
+    "--set-version-string",
+    "OriginalFilename",
+    exeName,
+    "--set-version-string",
+    "LegalCopyright",
+    `Copyright (C) ${new Date().getFullYear()} 静音AI`,
     "--set-file-version",
-    "11.0.0",
+    productVersion,
     "--set-product-version",
-    "11.0.0"
+    productVersion
   ]);
 }
 
@@ -227,7 +261,7 @@ function Save-CommandText {
 }
 
 try {
-  Write-Host "正在导出静音AI绘画诊断日志..."
+  Write-Host "正在导出静音AI画板诊断日志..."
   $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
   $desktop = [Environment]::GetFolderPath("Desktop")
   if ([string]::IsNullOrWhiteSpace($desktop)) {
@@ -237,7 +271,7 @@ try {
     $desktop = $PSScriptRoot
   }
 
-  $out = Join-Path $desktop ("静音AI绘画诊断日志_" + $stamp)
+  $out = Join-Path $desktop ("静音AI画板诊断日志_" + $stamp)
   New-Item -ItemType Directory -Path $out -Force | Out-Null
 
   $logRoot = Join-Path $env:LOCALAPPDATA "静音AI绘画数据\\logs"
@@ -383,23 +417,23 @@ await writeFile(path.join(releaseDir, "export-diagnostics.ps1"), `\uFEFF${diagno
 await writeFile(path.join(releaseDir, "导出诊断日志.bat"), diagnosticBatch, "utf8");
 await writeFile(path.join(releaseDir, "导出诊断日志.cmd"), diagnosticBatch, "utf8");
 await writeFile(path.join(releaseDir, "使用说明.txt"), `\uFEFF${[
-  "静音AI绘画 V11 Windows 使用说明",
+  `${productName} Windows 使用说明`,
   "",
-  "版本：V11 / 11.0.0",
+  `版本：${releaseName} / ${productVersion}`,
   "",
   `启动文件：${exeName}`,
   `SHA256：${hash}`,
   `大小：${(exeInfo.size / 1024 / 1024).toFixed(2)} MB`,
   "",
   "使用方法：",
-  "1. 双击 静音AI绘画.exe 启动软件；弹出的黑色运行框可以最小化，但不要关闭。",
+  `1. 双击 ${exeName} 启动软件；弹出的黑色运行框可以最小化，但不要关闭。`,
   "2. 打开 https://api.jingyin.online/ 注册账号。",
   "3. 联系管理员兑换算力：15871470202（手机微信同号）。",
   "4. 回到软件前端服务器页面，填写自己的 KEY 后即可使用。",
   "",
   "排查慢速/卡顿：",
   "1. 软件启动后，如果超过 5 分钟没出图、输入法打字卡、或后台没有生成记录，双击“导出诊断日志.bat”。",
-  "2. 弹出的窗口会显示导出进度；桌面会生成“静音AI绘画诊断日志_时间”文件夹。",
+  "2. 弹出的窗口会显示导出进度；桌面会生成“静音AI画板诊断日志_时间”文件夹。",
   "3. 把整个诊断文件夹发给管理员，不需要手动挑文件。",
   "4. 如果 .bat 被电脑拦截，双击同目录的“导出诊断日志.cmd”。",
   "5. 不要删除同目录的 export-diagnostics.ps1；bat/cmd 会调用它导出日志。",
@@ -407,6 +441,9 @@ await writeFile(path.join(releaseDir, "使用说明.txt"), `\uFEFF${[
   "",
   "模型、渠道、价格和限流：以 api.jingyin.online 后台当前配置为准。",
   "客户端只保存客户自己的静音统一 KEY，不内置渠道商 KEY、上游地址、上游价格或备用渠道策略。",
+  "",
+  "安装包里不含任何 KEY、历史图片或图片缓存：这些只会在你本机运行时写入",
+  "%LOCALAPPDATA%\\静音AI绘画数据\\（历史图/结果缓存/日志），不会打进这个安装包。",
   "",
   "安全提示：渠道商 API、真实上游 KEY、模型映射、价格口径和失败兜底统一由静音中转站控制；APP 不内置上传图、历史图或生成记录。"
 ].join("\r\n")}`, "utf8");
