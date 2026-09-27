@@ -113,14 +113,14 @@ import { generateVideo, getVideoStatus } from "./api/videos.js";
 import { normalizeApiKeyInput } from "./features/auth/api-key.js";
 import {
   RETOUCH_AUTO_PROMPT_CHAR_LIMIT,
-  RETOUCH_CUSTOM_PROMPT_LIMIT,
   RETOUCH_FIT_OPTIONS,
+  RETOUCH_GOAL_TEXT,
   RETOUCH_HEM_OPTIONS,
   RETOUCH_SYMMETRY_OPTIONS,
   compileRetouchPrompt,
   defaultRetouchIntent,
+  isBuiltinRetouchPrompt,
   normalizeRetouchIntent,
-  summarizeRetouchIntent,
   validateRetouchIntent,
   WHITE_REFINE_BATCH_LEGACY_DEFAULT_PROMPT,
   WHITE_REFINE_COLOR_LOCK_LEGACY_DEFAULT_PROMPT,
@@ -597,8 +597,10 @@ const RECOLOR_UPLOAD_LABELS = {
     hint: "可选；补充颜色禁忌、局部材质、客户要求或要避免的效果，不上传时不强行添加。"
   }
 };
-// 2026-09-26 改「多图生图」之前的精修上传区标题（只用于把还停在旧标题上的页面迁移过来）。
-const LEGACY_WHITE_REFINE_UPLOAD_LABELS = {
+// 2026-09-26 历次精修上传区标题（只用于把还停在旧标题上的页面迁移过来；用户改过的标题不动）：
+//   第一代：批量平铺图/挂拍图 + 可选参考/细节图
+//   第二代：多图生图（图1~图N）+ 补充素材（图N+1…）
+const LEGACY_WHITE_REFINE_UPLOAD_LABELS_1 = {
   model: {
     title: "批量平铺图/挂拍图",
     hint: "批量上传要变白底并精修的服装图；图1款式、颜色、面料和全部细节是唯一主事实。"
@@ -612,16 +614,30 @@ const LEGACY_WHITE_REFINE_UPLOAD_LABELS = {
     hint: "白底精修不使用图3，补充要求请写在文字里。"
   }
 };
-const WHITE_REFINE_UPLOAD_LABELS = {
+const LEGACY_WHITE_REFINE_UPLOAD_LABELS_2 = {
   model: {
-    // 2026-09-26（按用户要求）：从「批量…」改成「多图生图」——
-    // 一次可以上传同一件服装的多张素材，但点一次生成只出一张成品图。
     title: "多图生图（图1~图N）",
     hint: "同一件服装可以一次上传多张（正面/背面/侧面/细节/挂拍）；点生成只输出一张白底精修成品图。"
   },
   clothing: {
     title: "补充素材（图N+1…）",
     hint: "继续补充同一件服装的其它角度或细节；和多图生图里的图一起合成同一张成品，不作为单独款式。"
+  },
+  reference: {
+    title: "不参与",
+    hint: "白底精修不使用图3，补充要求请写在文字里。"
+  }
+};
+const WHITE_REFINE_UPLOAD_LABELS = {
+  model: {
+    // 2026-09-26（按用户要求）：图1 就是多图上传区，标题直接叫「图片上传」。
+    // 图2 已经不再渲染（图1 本身就是多图生图），这里保留一份标题只为兼容数据形状。
+    title: "图片上传",
+    hint: "同一件服装可以一次上传多张（正面/背面/侧面/细节/挂拍）；点生成只输出一张白底精修成品图。"
+  },
+  clothing: {
+    title: "补充素材（已不用）",
+    hint: "精修页只需要图1 的多图上传；这里仅为兼容旧数据保留。"
   },
   reference: {
     title: "不参与",
@@ -1381,10 +1397,11 @@ function makeOutfitPage(name = DEFAULT_OUTFIT_PAGE_NAME, patch = {}) {
       )
         ? RECOLOR_UPLOAD_LABELS
       : pageMode === "white-refine" && (
-        // 2026-09-26：精修改成「多图生图」，图1/图2 的标题跟着换。
-        // 只在标题还是旧默认值时迁移；用户自己改过的标题不动。
+        // 2026-09-26：精修只留一个「图片上传」多图区，图1/图2 的旧标题都要迁移过来。
+        // 只在标题还是历史默认值时迁移；用户自己改过的标题不动。
         !patch.uploadLabels
-        || uploadLabelsMatchPreset(sourceUploadLabels, LEGACY_WHITE_REFINE_UPLOAD_LABELS)
+        || uploadLabelsMatchPreset(sourceUploadLabels, LEGACY_WHITE_REFINE_UPLOAD_LABELS_1)
+        || uploadLabelsMatchPreset(sourceUploadLabels, LEGACY_WHITE_REFINE_UPLOAD_LABELS_2)
         || uploadLabelsMatchPreset(sourceUploadLabels, DEFAULT_UPLOAD_LABELS)
       )
         ? WHITE_REFINE_UPLOAD_LABELS
@@ -7115,8 +7132,6 @@ export default function OutfitWorkflow({
   // 精修页「结果图中线剪裁成两张」开关（默认开，和 3.0 的 localStorage 口径一致）+ 状态提示。
   const [splitHalves, setSplitHalves] = useState(() => readSplitHalvesEnabled());
   const [splitNote, setSplitNote] = useState("");
-  // 精修「查看本次最终提示词」展开开关（内容来自真正的编译器）。
-  const [retouchPreviewOpen, setRetouchPreviewOpen] = useState(false);
   const [, setEvents] = useState([]);
   const [clockNow, setClockNow] = useState(Date.now());
   const [cropTarget, setCropTarget] = useState(null);
@@ -7220,15 +7235,14 @@ export default function OutfitWorkflow({
 
   // 服装精修的结构化意图（唯一来源）：对称 / 衣摆或裙摆 / 版型 / 用户补充。
   const retouchIntent = normalizeRetouchIntent(settings.retouchIntent);
-  const retouchSummary = summarizeRetouchIntent(retouchIntent);
-  // 精修最终提示词预览：与提交时服务端用的是**同一个编译器**。
-  // 页面上的「通用白底精修提示词」是用户自己的输入；如果它还是系统默认词，
-  // 编译器会自动忽略它（固定段已经覆盖同样内容），避免同义重复。
+  // 精修最终提示词：与提交时服务端用的是**同一个编译器**。
+  // 2026-09-26（按用户要求）：精修跟换装一个逻辑 —— 这一份就是「通用白底精修提示词」框的内容，
+  // 由「精修设置 + 用户补充」自动生成，也可以直接手改；点设置按钮会按设置重新生成。
   const retouchPreview = compileRetouchPrompt({
     intent: retouchIntent,
-    userPrompt: settings.prompt,
     productNote: settings.productNote
   });
+  const retouchAutoPrompt = retouchPreview.prompt;
   const completedCount = tasks.filter((task) => task.status === "success").length;
   const failedCount = tasks.filter((task) => task.status === "failed").length;
   const runningCount = tasks.filter((task) => task.status === "running").length;
@@ -7327,7 +7341,13 @@ export default function OutfitWorkflow({
                   : isCustomWorkflow
                     ? "这个页面不会自动套用后台 SKILL；按你当前临时需求直接写。"
                     : "长期复用的换装规则，例如保留人物、锁定服装版型、真实贴合、批量一致。";
-  const productNoteFieldTitle = isRandomBackgroundWorkflow ? "场景补充" : "本次需求 / 商品补充信息";
+  // 2026-09-26：精修页把「本次需求 / 商品补充信息」改名叫「用户补充」——
+  // 它就是精修的补充要求，会被编译器并入最终提示词的【用户补充】段。
+  const productNoteFieldTitle = isRandomBackgroundWorkflow
+    ? "场景补充"
+    : isWhiteRefineWorkflow
+      ? "用户补充"
+      : "本次需求 / 商品补充信息";
   const productNotePlaceholder = isRandomBackgroundWorkflow
     ? "写你想要的大概场景需求，例如：早秋休闲度假实景街景，少量斑马线，适度景深虚化，平视机位，画面干净。"
     : "只写这次要额外控制的内容，例如袖长、裙长、SKU颜色、背景、鞋包是否保留。";
@@ -7689,9 +7709,12 @@ export default function OutfitWorkflow({
   const promptFieldRef = useRef(null);
   // 「通用换装提示词」是否被用户手改过：手改后先不再自动覆盖，直到下一次改换装设置/补充提示词。
   const outfitPromptHandEditedRef = useRef(false);
+  // 精修同理：「通用白底精修提示词」被手改过就先不自动覆盖，直到下一次改精修设置/用户补充。
+  const retouchPromptHandEditedRef = useRef(false);
   // 切页视为没有手改（换回这一页时按当前设置重新生成）。
   useEffect(() => {
     outfitPromptHandEditedRef.current = false;
+    retouchPromptHandEditedRef.current = false;
   }, [activeOutfitPageId]);
 
   // 2026-09-26（按用户要求）：批量换装的「通用换装提示词」由换装设置 + 图2事实 + 补充提示词自动生成。
@@ -7708,11 +7731,42 @@ export default function OutfitWorkflow({
       : { ...current, prompt: outfitPromptWithNote }));
   }, [isOutfitWorkflow, outfitPromptWithNote, settings.prompt]);
 
-  // 通用换装提示词框按内容自撑高度：整页只保留一条滚动条，框内不出现第二条。
+  // 精修：和换装完全同一套逻辑 ——「通用白底精修提示词」由「精修设置 + 用户补充」自动生成，
+  // 也可以直接手改；点对称/衣摆/版型或改用户补充就按新设置重新生成。
+  useEffect(() => {
+    if (!isWhiteRefineWorkflow) return;
+    if (retouchPromptHandEditedRef.current) return;
+    setSettings((current) => {
+      const currentPrompt = String(current.prompt || "");
+      const currentNote = String(current.productNote || "");
+      // 2026-09-26 一次性迁移：以前用户是在「通用白底精修提示词」里手写整段要求的
+      //（那时这一框就是唯一提示词）。现在这一框变成"自动结果"，所以先把用户**自己写的**内容
+      // 搬进「用户补充」，再由编译器合并回去 —— 保证原来写的东西一个字都不丢。
+      //
+      // ⚠️ 必须排除"这一框里已经是编译器产出"的情况（含固定目标段），否则自动生成的结果会被
+      //    当成用户手写内容反复搬进用户补充，越滚越长（这个坑已经踩过一次）。
+      const looksCompiled = currentPrompt.includes(RETOUCH_GOAL_TEXT);
+      const userWritten = currentPrompt.trim()
+        && !looksCompiled
+        && !isBuiltinRetouchPrompt(currentPrompt)
+        && currentPrompt.length <= 6000
+        && currentNote.length <= 20000;
+      if (userWritten && !currentNote.includes(currentPrompt.trim())) {
+        return {
+          ...current,
+          productNote: [currentNote, currentPrompt].filter((item) => String(item || "").trim()).join("\n"),
+          prompt: retouchAutoPrompt
+        };
+      }
+      return currentPrompt === retouchAutoPrompt ? current : { ...current, prompt: retouchAutoPrompt };
+    });
+  }, [isWhiteRefineWorkflow, retouchAutoPrompt, settings.prompt]);
+
+  // 提示词框按内容自撑高度：整页只保留一条滚动条，框内不出现第二条。
   // 首选 CSS 的 field-sizing: content（浏览器自己按内容定高），不支持时再用 JS 兜底。
   // 注意不能让 JS 写死像素高度与 field-sizing 打架 —— 那会把内容裁掉（已经踩过一次）。
   useEffect(() => {
-    if (!isOutfitWorkflow) return;
+    if (!isOutfitWorkflow && !isWhiteRefineWorkflow) return;
     const el = promptFieldRef.current?.querySelector("textarea.outfitPromptLive");
     if (!el) return;
     const supportsFieldSizing = typeof CSS !== "undefined"
@@ -7724,7 +7778,7 @@ export default function OutfitWorkflow({
     }
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 480)}px`;
-  }, [isOutfitWorkflow, settings.prompt]);
+  }, [isOutfitWorkflow, isWhiteRefineWorkflow, settings.prompt]);
 
   useEffect(() => {
     if (!preview) return undefined;
@@ -7897,6 +7951,8 @@ export default function OutfitWorkflow({
 
   // 精修：唯一改动结构化精修意图的入口（同一个 normalize，保证枚举合法、字段完整）。
   function patchRetouchIntent(patch) {
+    // 改精修设置 = 按设置重新生成「通用白底精修提示词」（用户手改过也让位给这次重算）。
+    retouchPromptHandEditedRef.current = false;
     setSettings((current) => {
       const currentIntent = normalizeRetouchIntent(current.retouchIntent);
       const nextPatch = typeof patch === "function" ? patch(currentIntent) : patch;
@@ -10556,7 +10612,8 @@ function buildTasks(countOverride = plannedGenerationCount) {
   }
 
   // 精修设置区（位置与换装的换装设置一致：都在提示词区左半边）。
-  // 紧凑分组 + 只在需要时展开明细：对称 / 衣摆或裙摆 / 版型 / 用户补充。
+  // 2026-09-26（按用户要求）：只留"选择按钮"，把标题/说明/摘要那一段不是按钮的显示全部去掉，
+  // 左侧因此省下不少高度；当前状态本来就体现在右边「通用白底精修提示词」框里。
   function renderRetouchIntentPanel() {
     const chipGroup = (options, current, onPick) => options.map((option) => {
       const active = current === option.value;
@@ -10573,21 +10630,8 @@ function buildTasks(countOverride = plannedGenerationCount) {
         </button>
       );
     });
-    const followHint = (value, label) => (value === "follow_original"
-      ? `未选择「${label}」时只写"跟随原图"，不偷偷改版型、长度和尺寸`
-      : `会在最终提示词里写入改变指令：${label}`);
     return (
       <section className="retouchIntentPanel" aria-label="精修设置">
-        <header>
-          <div>
-            <h3>精修设置</h3>
-            <span>这里的选择会进入最终提示词；批次开始后再改只影响下一批。</span>
-          </div>
-          <span className="retouchIntentCount">
-            {`白底精修｜对称：${retouchSummary.symmetryText}｜衣摆：${retouchSummary.hemText}｜版型：${retouchSummary.fitText}`}
-          </span>
-        </header>
-
         <div className="retouchIntentRow">
           <span className="retouchIntentRowTitle">对称</span>
           <div className="retouchIntentChips">
@@ -10595,8 +10639,8 @@ function buildTasks(countOverride = plannedGenerationCount) {
           </div>
           <small className={retouchIntent.symmetry === "off" ? "" : "retouchIntentWarn"}>
             {retouchIntent.symmetry === "off"
-              ? "关闭对称：最大限度保留原图中真实的左右不对称细节，并明确禁止强行对称"
-              : "开启服装对称：只调整服装左右结构，不改变人物身体、脸、姿势、服装款式，也不新增设计"}
+              ? "保留原图真实的左右不对称，不强行对称"
+              : "只把服装左右结构调对称，不动人物和款式"}
           </small>
         </div>
 
@@ -10607,10 +10651,10 @@ function buildTasks(countOverride = plannedGenerationCount) {
           </div>
           <small className={retouchIntent.hemTreatment === "follow_original" ? "" : "retouchIntentWarn"}>
             {retouchIntent.hemTreatment === "follow_original"
-              ? "跟随原图：不添加任何衣摆/裙摆改变指令"
+              ? "不改衣摆/裙摆形态"
               : retouchIntent.hemTreatment === "straight"
-                ? "平直：把明显歪扭或摆放造成的波浪拉平直，但不抹掉原有开衩、褶裥和设计线"
-                : "自然波浪：呈现自然垂落的波浪，不凭空制造夸张褶皱"}
+                ? "把歪扭波浪拉平直，保住原有开衩、褶裥和设计线"
+                : "保持自然垂落的波浪，不制造夸张褶皱"}
           </small>
         </div>
 
@@ -10620,53 +10664,14 @@ function buildTasks(countOverride = plannedGenerationCount) {
             {chipGroup(RETOUCH_FIT_OPTIONS, retouchIntent.fit, (value) => patchRetouchIntent({ fit: value }))}
           </div>
           <small className={retouchIntent.fit === "follow_original" ? "" : "retouchIntentWarn"}>
-            {followHint(retouchIntent.fit, RETOUCH_FIT_OPTIONS.find((item) => item.value === retouchIntent.fit)?.label || "版型")}
+            {retouchIntent.fit === "follow_original"
+              ? "不改版型、长度和尺寸"
+              : `改成「${RETOUCH_FIT_OPTIONS.find((item) => item.value === retouchIntent.fit)?.label || ""}」轮廓，不改款式与细节`}
           </small>
-        </div>
-
-        <div className="retouchIntentRow">
-          <span className="retouchIntentRowTitle">用户补充</span>
-          <DebouncedTextarea
-            className="retouchIntentCustom"
-            value={retouchIntent.customPrompt}
-            onChange={(value) => patchRetouchIntent({ customPrompt: value })}
-            onKeyDown={handlePromptKeyDown}
-            placeholder="只写本次特殊要求，例如：背景保持纯白、保留吊牌、口袋压线要清楚。留空则只用上面的设置。"
-          />
-          <small>
-            {retouchIntent.customPrompt.length}/{RETOUCH_CUSTOM_PROMPT_LIMIT} 字 · 只作为【用户补充】出现一次，不会复制到其它段落
-          </small>
-        </div>
-
-        <div className="retouchIntentRow">
-          <div className="retouchIntentInline">
-            <small>
-              自动提示词 {retouchPreview.autoChars}/{RETOUCH_AUTO_PROMPT_CHAR_LIMIT} 字 · 用户补充 {retouchPreview.userChars} 字
-            </small>
-            <button className="imageFactToggle" type="button" onClick={() => setRetouchPreviewOpen((value) => !value)} aria-expanded={retouchPreviewOpen}>
-              {retouchPreviewOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-              <span>{retouchPreviewOpen ? "收起最终提示词" : "查看本次最终提示词"}</span>
-            </button>
-          </div>
-          {retouchPreviewOpen && (
-            <div className="retouchIntentPreview">
-              <pre>{retouchPreview.prompt}</pre>
-              <small>
-                共 {retouchPreview.chars} 字。这段就是服务端会用同一个编译器发出去的内容
-                （服务端还会追加智能介入文本，本页当前不启用）。
-              </small>
-            </div>
-          )}
-          {retouchPreview.warnings.length > 0 && (
-            <ul className="retouchIntentWarnings">
-              {retouchPreview.warnings.map((warning) => <li key={warning}>{warning}</li>)}
-            </ul>
-          )}
         </div>
       </section>
     );
   }
-
   function renderResultQueue() {
     return (
       <section className="resultPanel queuePanel" id="result-archive-section">
@@ -11125,7 +11130,10 @@ function buildTasks(countOverride = plannedGenerationCount) {
             bulkMode={modelBulkMode}
             onBulkModeChange={(mode) => void applyGroupPreprocess("model", mode)}
           />
-          {!isOutpaintWorkflow && !isRandomBackgroundWorkflow && <div className="assetSide">
+          {/* 2026-09-26（按用户要求）：精修页不再需要图2 —— 图1 本身就是多图上传，
+              所有图片一起合成一张成品图。所以精修页只渲染图1 这一个上传区。
+              其它分区的图2 原样保留；这里只是不渲染，已有的 clothingImages 数据不动。 */}
+          {!isOutpaintWorkflow && !isRandomBackgroundWorkflow && !isWhiteRefineWorkflow && <div className="assetSide">
             <UploadZone
               compact
               title={`图2：${uploadLabels.clothing.title}`}
@@ -11288,16 +11296,20 @@ function buildTasks(countOverride = plannedGenerationCount) {
                   {isOutfitWorkflow && (
                     <em className="composerFieldHint">按换装设置自动生成，也可以直接手改</em>
                   )}
+                  {isWhiteRefineWorkflow && (
+                    <em className="composerFieldHint">按精修设置自动生成，也可以直接手改</em>
+                  )}
                 </span>
-                {/* 批量换装：这个框就是**真正发送的内容**。
-                    它由「换装设置 + 图2服装事实 + 下面的补充提示词」自动生成；
-                    用户可以随手调整/增删，改换装部位时会按设置重新生成一遍。 */}
+                {/* 换装 / 精修：这个框就是**真正发送的内容**。
+                    它由「设置 + 补充」自动生成；用户可以随手调整/增删，
+                    点设置按钮时会按设置重新生成一遍。 */}
                 <DebouncedTextarea
-                  className={isOutfitWorkflow ? "outfitPromptLive" : undefined}
+                  className={isOutfitWorkflow || isWhiteRefineWorkflow ? "outfitPromptLive" : undefined}
                   value={settings.prompt}
                   onChange={(value) => {
-                    // 手改「通用换装提示词」：先记下来，别让自动生成立刻盖掉用户写的东西。
-                    outfitPromptHandEditedRef.current = true;
+                    // 手改提示词：先记下来，别让自动生成立刻盖掉用户写的东西。
+                    if (isOutfitWorkflow) outfitPromptHandEditedRef.current = true;
+                    if (isWhiteRefineWorkflow) retouchPromptHandEditedRef.current = true;
                     updateSetting("prompt", value);
                   }}
                   onKeyDown={handlePromptKeyDown}
@@ -11321,6 +11333,26 @@ function buildTasks(countOverride = plannedGenerationCount) {
                     </button>
                   </div>
                 )}
+                {isWhiteRefineWorkflow && (
+                  <div className="outfitPromptMeta">
+                    <span>
+                      共 {String(settings.prompt || "").length} 字（其中自动内容 {retouchPreview.autoChars}/{RETOUCH_AUTO_PROMPT_CHAR_LIMIT} 字
+                      {retouchPreview.userChars > 0 ? `、用户补充 ${retouchPreview.userChars} 字` : ""}）
+                    </span>
+                    <button
+                      className="outfitPromptClear"
+                      type="button"
+                      onClick={() => {
+                        retouchPromptHandEditedRef.current = false;
+                        updateSetting("prompt", retouchAutoPrompt);
+                        addEvent("精修设置", "已按当前精修设置重新生成提示词");
+                      }}
+                      title="把上面这个框恢复成按当前精修设置生成的内容"
+                    >
+                      按设置重新生成
+                    </button>
+                  </div>
+                )}
               </label>
 
               <label className="composerField composerNote">
@@ -11329,13 +11361,17 @@ function buildTasks(countOverride = plannedGenerationCount) {
                   {isOutfitWorkflow && (
                     <em className="composerFieldHint">会实时接到上面提示词的最后（只作为提示词正文的一部分，不再单独重复发给 API）</em>
                   )}
+                  {isWhiteRefineWorkflow && (
+                    <em className="composerFieldHint">会实时并入上面提示词的【用户补充】段，不再单独重复发给 API</em>
+                  )}
                 </span>
                 <DebouncedTextarea
                   value={settings.productNote}
                   onChange={(value) => {
-                    // 补充提示词本身就是「通用换装提示词」正文的一部分：改它就重新拼一次，
-                    // 保证"实时接到下面"这件事在手改过提示词之后也照样成立。
-                    outfitPromptHandEditedRef.current = false;
+                    // 补充提示词本身就是最终提示词正文的一部分：改它就重新拼一次，
+                    // 保证"实时并进去"这件事在手改过提示词之后也照样成立。
+                    if (isOutfitWorkflow) outfitPromptHandEditedRef.current = false;
+                    if (isWhiteRefineWorkflow) retouchPromptHandEditedRef.current = false;
                     updateSetting("productNote", value);
                   }}
                   onKeyDown={handlePromptKeyDown}

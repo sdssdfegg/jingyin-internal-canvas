@@ -137,21 +137,29 @@ try {
   if (!(await waitForHealth(APP_PORT))) throw new Error("V11 测试实例未起来");
 
   // —— 1) 每个选择都进入真实请求与最终提示词 ——
+  // 2026-09-26（按用户要求）：提示词里只写"给模型的指令"，不写"关闭对称/跟随原图"这种状态说明。
+  const allPrompts = [];
   const cases = [
-    { name: "对称开启", patch: { symmetry: "on" }, needle: "开启服装对称" },
-    { name: "对称关闭", patch: { symmetry: "off" }, needle: "关闭对称" },
-    { name: "衣摆跟随原图", patch: { hemTreatment: "follow_original" }, needle: "衣摆或裙摆：跟随原图。" },
-    { name: "衣摆平直", patch: { hemTreatment: "straight" }, needle: "衣摆或裙摆：平直" },
-    { name: "衣摆自然波浪", patch: { hemTreatment: "natural_wave" }, needle: "衣摆或裙摆：自然波浪" },
-    { name: "版型跟随原图", patch: { fit: "follow_original" }, needle: "版型：跟随原图。" },
-    { name: "版型直筒", patch: { fit: "straight" }, needle: "版型：直筒" },
-    { name: "版型收腰", patch: { fit: "waisted" }, needle: "版型：收腰" },
-    { name: "版型宽松", patch: { fit: "loose" }, needle: "版型：宽松" }
+    { name: "对称开启", patch: { symmetry: "on" }, needle: "把服装左右结构调成对称版型" },
+    { name: "对称关闭", patch: { symmetry: "off" }, needle: "保留原图中真实的左右不对称细节，不要强行把服装做成对称。" },
+    { name: "衣摆跟随原图（整行省略）", patch: { hemTreatment: "follow_original" }, absent: "衣摆" },
+    { name: "衣摆平直", patch: { hemTreatment: "straight" }, needle: "把明显歪扭或摆放造成的衣摆、裙摆波浪拉平直" },
+    { name: "衣摆自然波浪", patch: { hemTreatment: "natural_wave" }, needle: "衣摆或裙摆保持自然垂落的波浪" },
+    { name: "版型跟随原图（不写版型词）", patch: { fit: "follow_original" }, absent: "版型" },
+    { name: "版型直筒", patch: { fit: "straight" }, needle: "把服装版型修成直筒轮廓" },
+    { name: "版型收腰", patch: { fit: "waisted" }, needle: "把服装版型修成收腰轮廓" },
+    { name: "版型宽松", patch: { fit: "loose" }, needle: "把服装版型修成宽松轮廓" }
   ];
   for (const item of cases) {
     const result = await promptFor({ retouchIntent: intent(item.patch) });
-    check(`上游提示词含「${item.name}」`, result.ok && result.prompt.includes(item.needle), `${result.status} ${item.needle}`);
+    allPrompts.push(result.prompt);
+    const ok = result.ok && (item.needle ? result.prompt.includes(item.needle) : true)
+      && (item.absent ? !result.prompt.includes(item.absent) : true);
+    check(`上游提示词含「${item.name}」`, ok, `${result.status} ${item.needle || item.absent}`);
   }
+  check("上游提示词里不出现状态说明（关闭对称 / 开启服装对称 / 跟随原图 / 「对称：」「版型：」这类标签）",
+    !/关闭对称|开启服装对称|跟随原图|对称：|衣摆或裙摆：|版型：/.test(allPrompts.join("\n")),
+    allPrompts.join("\n").slice(0, 120));
 
   // —— 2) 默认状态不强制改动原服装 ——
   const defaultRequest = await promptFor({ retouchIntent: intent() });
@@ -159,33 +167,47 @@ try {
   check("默认状态不出现任何主动改变指令",
     !/平直/.test(defaultRequest.prompt)
       && !/自然波浪/.test(defaultRequest.prompt)
-      && !/版型：(直筒|收腰|宽松)/.test(defaultRequest.prompt)
-      && !/开启服装对称/.test(defaultRequest.prompt),
-    defaultRequest.prompt.split("\n").slice(-3).join(" / "));
+      && !/直筒|收腰|宽松/.test(defaultRequest.prompt)
+      && !/对称版型/.test(defaultRequest.prompt),
+    defaultRequest.prompt.split("\n").slice(-2).join(" / "));
+  check("默认状态只给「保留不对称、不要强行对称」这一条结构指令",
+    /保留原图中真实的左右不对称细节，不要强行把服装做成对称。/.test(defaultRequest.prompt));
   check("默认状态仍包含八项固定精修要求",
     ["干净的服装白底精修图", "去除明显褶皱", "横平竖直", "不创新", "去掉衣架", "不偏色", "轮廓平滑"]
       .every((needle) => defaultRequest.prompt.includes(needle)));
 
-  // —— 3) 页面预览 == 实际请求（同一个编译器） ——
+  // —— 3) 页面显示的提示词 == 实际请求（生产路径：服务端原样转发前端编译结果） ——
   const previewIntent = intent({ symmetry: "on", hemTreatment: "straight", fit: "loose", customPrompt: "保留吊牌，背景纯白" });
-  const pagePrompt = "顾客要求：衣架必须完全去掉";
   const productNote = "场景补充：不要加光斑";
-  const preview = compileRetouchPrompt({ intent: previewIntent, userPrompt: pagePrompt, productNote });
-  const previewRequest = await promptFor({ retouchIntent: previewIntent, prompt: pagePrompt, productNote });
-  check("页面编译的预览与上游实际收到的提示词逐字一致",
+  // 前端「通用白底精修提示词」框里的内容 = 共享编译器的输出（含用户补充）
+  const preview = compileRetouchPrompt({ intent: previewIntent, productNote });
+  const previewRequest = await promptFor({ retouchIntent: previewIntent, prompt: preview.prompt, productNote });
+  check("页面显示的提示词与上游实际收到的提示词逐字一致（转发路径）",
     previewRequest.ok && previewRequest.prompt.trim() === preview.prompt.trim(),
     JSON.stringify({ previewHead: preview.prompt.slice(0, 60), upstreamHead: previewRequest.prompt.slice(0, 60) }));
+  check("转发路径不再重复追加用户补充（只出现一次）",
+    previewRequest.prompt.split("保留吊牌，背景纯白").length - 1 === 1
+      && previewRequest.prompt.split(productNote).length - 1 === 1,
+    String(previewRequest.prompt.split("保留吊牌，背景纯白").length - 1));
+  check("转发路径不会重复追加换装/精修固定段",
+    previewRequest.prompt.split("【服装精修目标】").length - 1 === 1
+      && previewRequest.prompt.split("【清理与轮廓】").length - 1 === 1);
 
-  // —— 4) 用户补充只出现一次 / 内置默认词不重复 ——
-  check("页面提示词只出现一次", previewRequest.prompt.split(pagePrompt).length - 1 === 1);
-  check("场景补充只出现一次", previewRequest.prompt.split(productNote).length - 1 === 1);
-  check("结构化用户补充只出现一次", previewRequest.prompt.split("保留吊牌，背景纯白").length - 1 === 1);
-  const builtinRequest = await promptFor({
-    retouchIntent: intent(),
-    prompt: compileRetouchPrompt({ intent: intent() }).prompt // 任何"已编译内容"都不是内置默认词，必须原样保留
-  });
-  check("非内置内容一律原样保留（不会误判成默认词被丢掉）",
-    builtinRequest.ok && builtinRequest.prompt.includes("【服装精修目标】"));
+  // —— 3b) 兜底路径：客户端没给正文时，服务端用同一个编译器生成（结果必须一致） ——
+  const fallbackRequest = await promptFor({ retouchIntent: previewIntent, prompt: "", productNote });
+  check("没有客户端正文时服务端用同一编译器兜底，结果与页面预览一致",
+    fallbackRequest.ok && fallbackRequest.prompt.trim() === preview.prompt.trim(),
+    JSON.stringify({ fallbackHead: fallbackRequest.prompt.slice(0, 60) }));
+  check("兜底路径里用户补充也只出现一次",
+    fallbackRequest.prompt.split("保留吊牌，背景纯白").length - 1 === 1
+      && fallbackRequest.prompt.split(productNote).length - 1 === 1);
+
+  // —— 4) 手改内容被尊重；内置默认词不会被当成编译结果丢掉 ——
+  const handEdited = "手改后的提示词：背景纯白，保留吊牌和吊牌线";
+  const handEditedRequest = await promptFor({ retouchIntent: intent(), prompt: handEdited });
+  check("在提示词框里手改的内容会被原样发出去",
+    handEditedRequest.ok && handEditedRequest.prompt.trim() === handEdited,
+    JSON.stringify(handEditedRequest.prompt.slice(0, 60)));
 
   // —— 5) 非法枚举 / 版本 → 400 ——
   const badCases = [

@@ -64,21 +64,26 @@ export function usesRetouchIntent(payload) {
 }
 
 /**
- * 服装精修的最终提示词：由共享的唯一编译器生成（前端预览用的是同一个函数）。
+ * 服装精修的最终提示词。
  *
- * 与换装的区别：精修页的「通用白底精修提示词」是**用户自己的输入**（不是编译结果），
- * 所以这里必须编译，而不是像换装那样原样转发 payload.prompt。
- * 页面提示词如果还是系统内置默认词，编译器会忽略它（固定段已覆盖同样内容），避免同义重复。
+ * 2026-09-26（按用户要求，和换装统一）：精修页的「通用白底精修提示词」现在**就是自动生成、
+ * 也可以手改的最终提示词**（由「精修设置 + 用户补充」编译而来），所以服务端这一层：
+ *   1. 客户端给了正文 → 原样使用（尊重手改）；
+ *   2. 没给正文（其它客户端/脚本）→ 用同一个共享编译器从 retouchIntent 兜底生成，
+ *      这时把 `productNote` 也算进【用户补充】（因为前端没有替我们合并）；
+ *   3. 转发路径**不再重复追加 productNote**（它已经在前端并进正文了）。
+ * 「智能介入」的 poseAnchorPrompt 仍然追加（精修页当前不启用）。
  */
 export function buildRetouchPrompt(payload) {
   const { intent } = validateRetouchIntent(payload.retouchIntent);
-  const compiled = compileRetouchPrompt({
+  const clientPrompt = String(payload?.prompt || "").trim();
+  const base = clientPrompt || compileRetouchPrompt({
     intent,
     userPrompt: payload?.prompt,
     productNote: payload?.productNote
-  });
+  }).prompt;
   const poseAnchorPrompt = String(payload?.poseAnchorPrompt || "").trim();
-  return [compiled.prompt, poseAnchorPrompt].filter(Boolean).join("\n\n");
+  return [base, poseAnchorPrompt].filter(Boolean).join("\n\n");
 }
 
 /**
@@ -96,7 +101,7 @@ export function buildRetouchPrompt(payload) {
  *     4. 「智能介入」的 poseAnchorPrompt 仍然追加，它不属于补充提示词。
  *
  * 服装精修（white-refine + retouchIntent）走 buildRetouchPrompt()：
- * 页面提示词是用户输入，所以由本层用共享编译器编译，保证"预览 == 实际发送"。
+ * 页面提示词就是自动生成/手改后的最终正文，有正文就转发、没正文才用共享编译器兜底。
  *
  * 其它情况（既没有合法 outfitIntent 也没有合法 retouchIntent 的批量 workflow）
  * → 只发用户原话（历史契约，行为不变）。

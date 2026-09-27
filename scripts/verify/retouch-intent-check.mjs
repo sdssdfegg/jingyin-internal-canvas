@@ -7,6 +7,8 @@
 //
 // 用法：node scripts/verify/retouch-intent-check.mjs
 import process from "node:process";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   RETOUCH_AUTO_PROMPT_CHAR_LIMIT,
   RETOUCH_CLEANUP_TEXT,
@@ -24,6 +26,7 @@ const results = [];
 function check(name, pass, detail = "") {
   results.push({ name, pass: Boolean(pass), detail: String(detail) });
 }
+const CLIENT = path.join(process.cwd(), "src", "outfit-workflow.jsx");
 const compiled = (intentPatch = {}, options = {}) => compileRetouchPrompt({
   intent: normalizeRetouchIntent(intentPatch),
   ...options
@@ -58,21 +61,31 @@ check("横平竖直明确带限制：不强行拉直褶裥/弧线/波浪边/不�
 check("固定目标与清理段各只出现一次",
   base.prompt.split(RETOUCH_GOAL_TEXT).length - 1 === 1
     && base.prompt.split(RETOUCH_CLEANUP_TEXT).length - 1 === 1);
-check("分段顺序是 目标 → 清理与轮廓 → 结构事实",
+check("分段顺序是 目标 → 清理与轮廓 → 结构要求",
   base.sections.map((section) => section.id).join(",") === "goal,cleanup,structure",
   base.sections.map((section) => section.id).join(","));
 check("没有用户补充时不出现【用户补充】段", !base.prompt.includes("【用户补充】"));
+
+// ---------- 2b) 提示词里不写"状态说明"，只写给模型的指令 ----------
+check("提示词里不出现「关闭对称/开启服装对称/跟随原图/平直/自然波浪」这类状态标签",
+  !/关闭对称|开启服装对称|对称：|衣摆或裙摆：|版型：|跟随原图/.test(base.prompt),
+  base.prompt.slice(-120));
+check("结构段只写指令：关闭对称写成『保留原图真实的左右不对称细节，不要强行做成对称』",
+  base.structure === "保留原图中真实的左右不对称细节，不要强行把服装做成对称。",
+  JSON.stringify(base.structure));
+check("选「跟随原图」的字段整行省略（不占字数、不说废话）",
+  !base.prompt.includes("衣摆") && !base.prompt.includes("版型"),
+  base.structure);
 
 // ---------- 3) 对称 ----------
 const symmetryOff = compiled({ symmetry: "off" });
 const symmetryOn = compiled({ symmetry: "on" });
 check("关闭对称：明确禁止强行对称并保留原始不对称",
-  /关闭对称/.test(symmetryOff.prompt) && /保留原图中真实的左右不对称细节/.test(symmetryOff.prompt)
+  /保留原图中真实的左右不对称细节/.test(symmetryOff.prompt)
     && /不要强行把服装做成对称/.test(symmetryOff.prompt),
   symmetryOff.structure);
 check("开启服装对称：只调服装左右结构、不动人物与款式",
-  /开启服装对称/.test(symmetryOn.prompt)
-    && /只调整服装左右结构/.test(symmetryOn.prompt)
+  /把服装左右结构调成对称版型/.test(symmetryOn.prompt)
     && /不改变人物身体、脸、姿势和服装款式/.test(symmetryOn.prompt),
   symmetryOn.structure);
 check("对称开与关生成不同指令", symmetryOff.prompt !== symmetryOn.prompt);
@@ -81,14 +94,13 @@ check("对称开与关生成不同指令", symmetryOff.prompt !== symmetryOn.pro
 const hemFollow = compiled({ hemTreatment: "follow_original" });
 const hemStraight = compiled({ hemTreatment: "straight" });
 const hemWave = compiled({ hemTreatment: "natural_wave" });
-check("衣摆跟随原图：只写跟随原图", /衣摆或裙摆：跟随原图。/.test(hemFollow.prompt), hemFollow.structure);
-check("衣摆跟随原图：不出现平直/自然波浪指令",
-  !hemFollow.prompt.includes("衣摆或裙摆：平直") && !hemFollow.prompt.includes("自然波浪"), hemFollow.structure);
+check("衣摆跟随原图：结构段不写任何衣摆内容",
+  !/衣摆/.test(hemFollow.structure) && !/裙摆/.test(hemFollow.structure), JSON.stringify(hemFollow.structure));
 check("衣摆平直：写入平直指令且保住开衩褶裥设计线",
-  /衣摆或裙摆：平直/.test(hemStraight.prompt) && /不要抹掉原有的开衩、褶裥和设计线/.test(hemStraight.prompt),
+  /把明显歪扭或摆放造成的衣摆、裙摆波浪拉平直/.test(hemStraight.prompt) && /不要抹掉原有的开衩、褶裥和设计线/.test(hemStraight.prompt),
   hemStraight.structure);
 check("衣摆自然波浪：写入波浪指令且不制造夸张褶皱",
-  /衣摆或裙摆：自然波浪/.test(hemWave.prompt) && /不要凭空制造夸张褶皱/.test(hemWave.prompt),
+  /衣摆或裙摆保持自然垂落的波浪/.test(hemWave.prompt) && /不要凭空制造夸张褶皱/.test(hemWave.prompt),
   hemWave.structure);
 check("衣摆三种状态互不相同",
   new Set([hemFollow.prompt, hemStraight.prompt, hemWave.prompt]).size === 3);
@@ -98,26 +110,25 @@ const fitFollow = compiled({ fit: "follow_original" });
 const fitStraight = compiled({ fit: "straight" });
 const fitWaisted = compiled({ fit: "waisted" });
 const fitLoose = compiled({ fit: "loose" });
-check("版型跟随原图：只写跟随原图", /版型：跟随原图。/.test(fitFollow.prompt), fitFollow.structure);
-check("版型跟随原图：不出现直筒/收腰/宽松",
-  !/版型：(直筒|收腰|宽松)/.test(fitFollow.prompt), fitFollow.structure);
-check("版型直筒写入正确指令", /版型：直筒/.test(fitStraight.prompt), fitStraight.structure);
-check("版型收腰写入正确指令", /版型：收腰/.test(fitWaisted.prompt), fitWaisted.structure);
-check("版型宽松写入正确指令", /版型：宽松/.test(fitLoose.prompt), fitLoose.structure);
+check("版型跟随原图：结构段不写任何版型内容",
+  !/版型/.test(fitFollow.structure), JSON.stringify(fitFollow.structure));
+check("版型直筒写入正确指令", /把服装版型修成直筒轮廓/.test(fitStraight.prompt), fitStraight.structure);
+check("版型收腰写入正确指令", /把服装版型修成收腰轮廓/.test(fitWaisted.prompt), fitWaisted.structure);
+check("版型宽松写入正确指令", /把服装版型修成宽松轮廓/.test(fitLoose.prompt), fitLoose.structure);
 check("版型四种状态互不相同",
   new Set([fitFollow.prompt, fitStraight.prompt, fitWaisted.prompt, fitLoose.prompt]).size === 4);
 check("改版型时说明不改款式/长度/细节",
-  /版型：直筒，把服装修成直筒轮廓，不改变款式、长度和细节设计。/.test(fitStraight.prompt), fitStraight.structure);
+  /把服装版型修成直筒轮廓，不改变款式、长度和细节设计。/.test(fitStraight.prompt), fitStraight.structure);
 
 // ---------- 6) 默认「跟随原图」不会强制改变原服装 ----------
 const defaultPromptText = compiled().prompt;
 check("默认状态不出现任何主动改变指令",
   !/平直/.test(defaultPromptText)
     && !/自然波浪/.test(defaultPromptText)
-    && !/版型：(直筒|收腰|宽松)/.test(defaultPromptText)
-    && !/开启服装对称/.test(defaultPromptText),
+    && !/直筒|收腰|宽松/.test(defaultPromptText)
+    && !/对称版型/.test(defaultPromptText),
   compiled().structure);
-check("默认状态明确保留原图不对称细节", /关闭对称/.test(defaultPromptText));
+check("默认状态明确保留原图不对称细节", /不要强行把服装做成对称/.test(defaultPromptText));
 
 // ---------- 7) 用户补充只出现一次 + 内置默认词不重复塞 ----------
 const withCustom = compiled({ customPrompt: "背景保持纯白，保留吊牌" });
@@ -187,11 +198,55 @@ check("编译结果里没有 [object Object]",
 check("旧字段不进入意图对象",
   !("legacySkill" in dirty));
 
-// ---------- 11) 摘要 ----------
+// ---------- 11) 摘要（编译器提供；界面已按用户要求不再显示这一段） ----------
 const summary = summarizeRetouchIntent({ symmetry: "off", hemTreatment: "follow_original", fit: "straight" });
 check("摘要文案正确（白底精修｜对称：关闭｜衣摆：跟随原图｜版型：直筒）",
   summary.symmetryText === "关闭对称" && summary.hemText === "跟随原图" && summary.fitText === "直筒",
   JSON.stringify(summary));
+
+// ---------- 12) 前端接线（源码级契约，防止后来改坏） ----------
+const clientSource = readFileSync(CLIENT, "utf8");
+const panelStart = clientSource.indexOf("function renderRetouchIntentPanel");
+const panelEnd = clientSource.indexOf("function renderResultQueue", panelStart);
+const panelSource = panelStart >= 0 && panelEnd > panelStart ? clientSource.slice(panelStart, panelEnd) : "";
+check("精修设置面板只在精修页渲染，且位于提示词区左半边",
+  /isWhiteRefineWorkflow && \(\s*<div className="composerIntentCol">\s*\{renderRetouchIntentPanel\(\)\}/.test(clientSource));
+check("左侧面板只剩下三组选择按钮：没有标题/说明/摘要/预览/用户补充框",
+  panelSource.length > 0
+    && !/<header/.test(panelSource)
+    && !/retouchIntentCount/.test(panelSource)
+    && !/retouchIntentPreview/.test(panelSource)
+    && !/retouchIntentCustom/.test(panelSource)
+    && (panelSource.match(/retouchIntentChips/g) || []).length === 3,
+  `chips=${(panelSource.match(/retouchIntentChips/g) || []).length}`);
+check("左侧不再有「用户补充」输入框（已挪到右侧并改名）",
+  !/retouchIntentCustom/.test(clientSource)
+    && /isWhiteRefineWorkflow\s*\n?\s*\?\s*"用户补充"/.test(clientSource));
+check("「通用白底精修提示词」由精修设置自动生成（与换装同一套逻辑）",
+  /currentPrompt === retouchAutoPrompt/.test(clientSource)
+    && /retouchPromptHandEditedRef\.current = true/.test(clientSource)
+    && /按当前精修设置重新生成提示词/.test(clientSource));
+check("旧的手写提示词会迁移进「用户补充」，不会丢",
+  /isBuiltinRetouchPrompt\(currentPrompt\)/.test(clientSource)
+    && /productNote: \[currentNote, currentPrompt\]/.test(clientSource));
+check("迁移有防线：已经是编译器产出（含固定目标段）的内容不会再被搬进用户补充",
+  /const looksCompiled = currentPrompt\.includes\(RETOUCH_GOAL_TEXT\)/.test(clientSource)
+    && /!looksCompiled/.test(clientSource)
+    && /currentPrompt\.length <= 6000/.test(clientSource),
+  "防止越搬越长的回流（已实测踩过）");
+check("精修页只渲染图1 一个上传区（图2 已按用户要求删除）",
+  /!isWhiteRefineWorkflow && <div className="assetSide">/.test(clientSource));
+const currentLabelsBlock = clientSource.slice(
+  clientSource.indexOf("const WHITE_REFINE_UPLOAD_LABELS"),
+  clientSource.indexOf("const OUTPAINT_UPLOAD_LABELS")
+);
+check("图1 上传区标题改成「图片上传」（图2 标题已说明不再使用）",
+  /title: "图片上传"/.test(currentLabelsBlock) && /已不用/.test(currentLabelsBlock),
+  currentLabelsBlock.slice(0, 120));
+check("旧的两代精修标题都写进了迁移名单",
+  /LEGACY_WHITE_REFINE_UPLOAD_LABELS_1/.test(clientSource) && /LEGACY_WHITE_REFINE_UPLOAD_LABELS_2/.test(clientSource));
+check("没有把换装的业务文案复制到精修",
+  !/图2服装事实|本次换装目标|人物基准/.test(panelSource));
 
 const failed = results.filter((item) => !item.pass);
 console.log(JSON.stringify({

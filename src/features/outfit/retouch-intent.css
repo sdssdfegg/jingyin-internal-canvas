@@ -1,8 +1,9 @@
-/* 服装精修「精修设置」+ 用户补充 + 最终提示词预览样式。
+/* 服装精修「精修设置」样式。
  *
  * 位置与换装的「换装设置」一致（提示词区左半边），视觉沿用 V11 现有的
- * `.outfitIntentPanel` 那一套（紧凑分组 + 金色选中），所以这里只覆盖差异部分，
- * 不重排整页、不影响其它分区。 */
+ * `.outfitIntentPanel` 那一套（紧凑分组 + 金色选中）。
+ * 2026-09-26（按用户要求）：左侧只保留"选择按钮"，标题/说明/摘要/预览/输入框全部去掉，
+ * 省下来的高度留给提示词；当前状态直接体现在右边「通用白底精修提示词」框里。 */
 
 .outfitWorkflowEmbedded .retouchIntentPanel {
   display: grid;
@@ -13,47 +14,16 @@
   background: var(--panel-bg);
 }
 
-.outfitWorkflowEmbedded .retouchIntentPanel > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.outfitWorkflowEmbedded .retouchIntentPanel > header > div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.outfitWorkflowEmbedded .retouchIntentPanel h3 {
-  margin: 0;
-  color: var(--text);
-  font-size: 13px;
-}
-
-.outfitWorkflowEmbedded .retouchIntentPanel > header span {
-  color: var(--text-soft);
-  font-size: 11px;
-}
-
-.outfitWorkflowEmbedded .retouchIntentPanel > header .retouchIntentCount {
-  flex: none;
-  max-width: 320px;
-  padding: 3px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: #fbbf24;
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: normal;
-}
-
 .outfitWorkflowEmbedded .retouchIntentRow {
   display: grid;
   gap: 5px;
   padding-top: 8px;
   border-top: 1px solid var(--border);
+}
+
+.outfitWorkflowEmbedded .retouchIntentRow:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .outfitWorkflowEmbedded .retouchIntentRowTitle {
@@ -93,8 +63,7 @@
   background: color-mix(in srgb, #fbbf24 14%, transparent);
 }
 
-.outfitWorkflowEmbedded .retouchIntentRow small,
-.outfitWorkflowEmbedded .retouchIntentPreview small {
+.outfitWorkflowEmbedded .retouchIntentRow small {
   color: var(--text-soft);
   font-size: 11px;
   line-height: 1.5;
@@ -102,56 +71,4 @@
 
 .outfitWorkflowEmbedded .retouchIntentWarn {
   color: #fbbf24 !important;
-}
-
-.outfitWorkflowEmbedded .retouchIntentRow textarea.retouchIntentCustom {
-  height: auto;
-  min-height: 62px;
-  max-height: 200px;
-  overflow-y: auto;
-  field-sizing: content;
-  resize: vertical;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  background: var(--input-bg);
-  padding: 8px 10px;
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.outfitWorkflowEmbedded .retouchIntentInline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.outfitWorkflowEmbedded .retouchIntentPreview {
-  display: grid;
-  gap: 6px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--panel-strong) 46%, transparent);
-}
-
-.outfitWorkflowEmbedded .retouchIntentPreview pre {
-  margin: 0;
-  max-height: 240px;
-  overflow: auto;
-  color: var(--text);
-  font-family: inherit;
-  font-size: 11px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.outfitWorkflowEmbedded .retouchIntentWarnings {
-  margin: 0;
-  padding-left: 18px;
-  color: #fbbf24;
-  font-size: 11px;
-  line-height: 1.6;
 }

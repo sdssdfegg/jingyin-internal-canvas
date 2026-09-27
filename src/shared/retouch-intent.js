@@ -57,32 +57,33 @@ export const RETOUCH_GOAL_TEXT = [
 export const RETOUCH_CLEANUP_TEXT = "去掉衣架、夹子、大头针和固定服装的其他物品，只保留干净的服装主体；修正服装外轮廓，使轮廓平滑、连续、自然。";
 
 /**
- * 结构事实：对称 / 衣摆或裙摆 / 版型三行。
- * 选「跟随原图」时只写"跟随原图"，不加任何改变指令。
+ * 结构要求：**只写"给模型看的指令"**，不写"关闭对称""跟随原图"这种状态说明。
+ *
+ * 2026-09-26（按用户要求）：提示词是写给生图模型的，不是给客户看的述职报告 ——
+ *   - 不解释"开启了什么/关闭了什么"，直接把要求描述出来（例如关闭对称 → 只写
+ *     "保留原图中真实的左右不对称细节，不要强行把服装做成对称。"）；
+ *   - 选「跟随原图」时**整行省略**：没说就是不改，不需要写"跟随原图"占字数；
+ *   - 只有用户明确选了改变项，才写对应的改变指令。
  */
 export function retouchStructureLines(intent) {
   const normalized = normalizeRetouchIntent(intent);
   const lines = [];
-  lines.push(normalized.symmetry === "on"
-    ? "对称：开启服装对称，只调整服装左右结构让版型左右对称，不改变人物身体、脸、姿势和服装款式，不新增设计。"
-    : "对称：关闭对称，保留原图中真实的左右不对称细节，不要强行把服装做成对称。");
-  const hem = RETOUCH_HEM_OPTIONS.find((item) => item.value === normalized.hemTreatment);
-  if (normalized.hemTreatment === "follow_original") {
-    lines.push("衣摆或裙摆：跟随原图。");
-  } else if (normalized.hemTreatment === "straight") {
-    lines.push("衣摆或裙摆：平直，把明显歪扭或摆放造成的波浪拉平直，但不要抹掉原有的开衩、褶裥和设计线。");
+  if (normalized.symmetry === "on") {
+    lines.push("把服装左右结构调成对称版型，不改变人物身体、脸、姿势和服装款式，也不新增设计。");
   } else {
-    lines.push("衣摆或裙摆：自然波浪，呈现自然垂落的波浪，但不要凭空制造夸张褶皱。");
+    lines.push("保留原图中真实的左右不对称细节，不要强行把服装做成对称。");
   }
-  void hem;
-  if (normalized.fit === "follow_original") {
-    lines.push("版型：跟随原图。");
-  } else if (normalized.fit === "straight") {
-    lines.push("版型：直筒，把服装修成直筒轮廓，不改变款式、长度和细节设计。");
+  if (normalized.hemTreatment === "straight") {
+    lines.push("把明显歪扭或摆放造成的衣摆、裙摆波浪拉平直，但不要抹掉原有的开衩、褶裥和设计线。");
+  } else if (normalized.hemTreatment === "natural_wave") {
+    lines.push("衣摆或裙摆保持自然垂落的波浪，不要凭空制造夸张褶皱。");
+  }
+  if (normalized.fit === "straight") {
+    lines.push("把服装版型修成直筒轮廓，不改变款式、长度和细节设计。");
   } else if (normalized.fit === "waisted") {
-    lines.push("版型：收腰，把服装修成收腰轮廓，不改变款式、长度和细节设计。");
-  } else {
-    lines.push("版型：宽松，把服装修成宽松轮廓，不改变款式、长度和细节设计。");
+    lines.push("把服装版型修成收腰轮廓，不改变款式、长度和细节设计。");
+  } else if (normalized.fit === "loose") {
+    lines.push("把服装版型修成宽松轮廓，不改变款式、长度和细节设计。");
   }
   return lines;
 }
@@ -191,7 +192,7 @@ export function compileRetouchPrompt(options = {}) {
   if (userBlocks.length) sections.push({ id: "user", title: "【用户补充】", body: userBlocks.join("\n") });
   sections.push({ id: "goal", title: "【服装精修目标】", body: RETOUCH_GOAL_TEXT });
   sections.push({ id: "cleanup", title: "【清理与轮廓】", body: RETOUCH_CLEANUP_TEXT });
-  sections.push({ id: "structure", title: "【结构事实】", body: structure });
+  if (structure) sections.push({ id: "structure", title: "【结构要求】", body: structure });
 
   const prompt = sections.map((section) => `${section.title}\n${section.body}`).join("\n\n");
   const autoChars = RETOUCH_GOAL_TEXT.length + RETOUCH_CLEANUP_TEXT.length + structure.length + 3 * 8;
