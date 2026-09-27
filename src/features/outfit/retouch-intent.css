@@ -1,56 +1,62 @@
 /* 服装精修「精修设置」样式。
  *
- * 位置与换装的「换装设置」一致（提示词区左半边），视觉沿用 V11 现有的
- * `.outfitIntentPanel` 那一套（紧凑分组 + 金色选中）。
- * 2026-09-26（按用户要求）：左侧只保留"选择按钮"，标题/说明/摘要/预览/输入框全部去掉，
- * 省下来的高度留给提示词；当前状态直接体现在右边「通用白底精修提示词」框里。 */
+ * 2026-09-26（按用户要求）压成两行，省出大量竖向空间：
+ *   第一行 = 对称 / 衣摆或裙摆 / 版型 三组选择**排成一条**（占满整行）；
+ *   第二行 = 通用白底精修提示词 + 用户补充**并排**。
+ * 视觉沿用 V11 现有的金色选中口径（与换装设置、快捷生成的渠道选中一致）。 */
+
+/* 三组设置排成一条：整行铺开，窄屏才允许换行。 */
+.outfitWorkflowEmbedded .retouchSettingsRow {
+  grid-column: 1 / -1;
+}
 
 .outfitWorkflowEmbedded .retouchIntentPanel {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel-bg);
 }
 
+/* 每一组：标签 + 一排 chip 横向排开，不再各占一行。 */
 .outfitWorkflowEmbedded .retouchIntentRow {
-  display: grid;
-  gap: 5px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-
-.outfitWorkflowEmbedded .retouchIntentRow:first-child {
-  padding-top: 0;
-  border-top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .outfitWorkflowEmbedded .retouchIntentRowTitle {
+  flex: none;
   color: var(--text-soft);
   font-size: 11px;
   font-weight: 650;
+  white-space: nowrap;
 }
 
 .outfitWorkflowEmbedded .retouchIntentChips {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
 }
 
-/* 选中 = 金色，和快捷生成/换装设置同一口径；未选中是常规文字色。 */
+/* 选中 = 金色；未选中是常规文字色。比换装那套再紧凑一点，保证三组能排成一条。 */
 .outfitWorkflowEmbedded .retouchIntentChips button {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 10px;
+  gap: 4px;
+  height: 25px;
+  padding: 0 8px;
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--text);
   background: transparent;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .outfitWorkflowEmbedded .retouchIntentChips button:hover {
@@ -63,6 +69,8 @@
   background: color-mix(in srgb, #fbbf24 14%, transparent);
 }
 
+/* 排成一条之后每组的说明文字没地方放，也不再需要：右边提示词框里就是结果。
+   保留这两条样式只是为了兼容（例如以后想在某组后面补一句提示）。 */
 .outfitWorkflowEmbedded .retouchIntentRow small {
   color: var(--text-soft);
   font-size: 11px;
@@ -72,3 +80,39 @@
 .outfitWorkflowEmbedded .retouchIntentWarn {
   color: #fbbf24 !important;
 }
+
+/* 第二行：提示词 + 用户补充并排。 */
+.outfitWorkflowEmbedded .composerBody.withRetouch {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.outfitWorkflowEmbedded .composerBody.withRetouch .composerPromptCol {
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.85fr);
+  align-items: start;
+}
+
+/* 通用白底精修提示词：**定高 + 框内滑动**（提示词长了用滑轮看，不再把整页撑高）。 */
+.outfitWorkflowEmbedded .composerField textarea.retouchPromptLive {
+  height: 168px;
+  min-height: 168px;
+  max-height: 168px;
+  overflow-y: auto;
+  field-sizing: fixed;
+  border-color: color-mix(in srgb, #fbbf24 30%, transparent);
+  background: color-mix(in srgb, var(--panel-strong) 40%, transparent);
+  resize: none;
+}
+
+.outfitWorkflowEmbedded .composerField textarea.retouchPromptLive:focus {
+  border-color: color-mix(in srgb, #fbbf24 55%, transparent);
+}
+
+/* 用户补充框跟提示词框等高，看起来是一条。 */
+.outfitWorkflowEmbedded .composerBody.withRetouch .composerNote textarea {
+  height: 168px;
+  min-height: 168px;
+  max-height: 168px;
+  overflow-y: auto;
+  resize: none;
+}
+

@@ -7762,11 +7762,10 @@ export default function OutfitWorkflow({
     });
   }, [isWhiteRefineWorkflow, retouchAutoPrompt, settings.prompt]);
 
-  // 提示词框按内容自撑高度：整页只保留一条滚动条，框内不出现第二条。
-  // 首选 CSS 的 field-sizing: content（浏览器自己按内容定高），不支持时再用 JS 兜底。
-  // 注意不能让 JS 写死像素高度与 field-sizing 打架 —— 那会把内容裁掉（已经踩过一次）。
+  // 提示词框按内容自撑高度（**只给换装**）：整页只保留一条滚动条，框内不出现第二条。
+  // 精修页按用户要求改成"定高 + 框内滑动"（提示词长了用滑轮看），所以不在这里撑高。
   useEffect(() => {
-    if (!isOutfitWorkflow && !isWhiteRefineWorkflow) return;
+    if (!isOutfitWorkflow) return;
     const el = promptFieldRef.current?.querySelector("textarea.outfitPromptLive");
     if (!el) return;
     const supportsFieldSizing = typeof CSS !== "undefined"
@@ -7778,7 +7777,7 @@ export default function OutfitWorkflow({
     }
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 480)}px`;
-  }, [isOutfitWorkflow, isWhiteRefineWorkflow, settings.prompt]);
+  }, [isOutfitWorkflow, settings.prompt]);
 
   useEffect(() => {
     if (!preview) return undefined;
@@ -10637,11 +10636,6 @@ function buildTasks(countOverride = plannedGenerationCount) {
           <div className="retouchIntentChips">
             {chipGroup(RETOUCH_SYMMETRY_OPTIONS, retouchIntent.symmetry, (value) => patchRetouchIntent({ symmetry: value }))}
           </div>
-          <small className={retouchIntent.symmetry === "off" ? "" : "retouchIntentWarn"}>
-            {retouchIntent.symmetry === "off"
-              ? "保留原图真实的左右不对称，不强行对称"
-              : "只把服装左右结构调对称，不动人物和款式"}
-          </small>
         </div>
 
         <div className="retouchIntentRow">
@@ -10649,13 +10643,6 @@ function buildTasks(countOverride = plannedGenerationCount) {
           <div className="retouchIntentChips">
             {chipGroup(RETOUCH_HEM_OPTIONS, retouchIntent.hemTreatment, (value) => patchRetouchIntent({ hemTreatment: value }))}
           </div>
-          <small className={retouchIntent.hemTreatment === "follow_original" ? "" : "retouchIntentWarn"}>
-            {retouchIntent.hemTreatment === "follow_original"
-              ? "不改衣摆/裙摆形态"
-              : retouchIntent.hemTreatment === "straight"
-                ? "把歪扭波浪拉平直，保住原有开衩、褶裥和设计线"
-                : "保持自然垂落的波浪，不制造夸张褶皱"}
-          </small>
         </div>
 
         <div className="retouchIntentRow">
@@ -10663,11 +10650,6 @@ function buildTasks(countOverride = plannedGenerationCount) {
           <div className="retouchIntentChips">
             {chipGroup(RETOUCH_FIT_OPTIONS, retouchIntent.fit, (value) => patchRetouchIntent({ fit: value }))}
           </div>
-          <small className={retouchIntent.fit === "follow_original" ? "" : "retouchIntentWarn"}>
-            {retouchIntent.fit === "follow_original"
-              ? "不改版型、长度和尺寸"
-              : `改成「${RETOUCH_FIT_OPTIONS.find((item) => item.value === retouchIntent.fit)?.label || ""}」轮廓，不改款式与细节`}
-          </small>
         </div>
       </section>
     );
@@ -11275,16 +11257,17 @@ function buildTasks(countOverride = plannedGenerationCount) {
 
           {/* 2026-09-26（按用户要求）：换装设置内容不多，搬到提示词左边这半边的空位里，
               原来在图1~图3下面占的那一整块竖向空间就省出来了。
-              左边 = 换装设置；右边 = 通用换装提示词 + 补充提示词。 */}
-          <div className={`composerBody ${isOutfitWorkflow || isWhiteRefineWorkflow ? "withIntent" : ""}`}>
+              左边 = 换装设置；右边 = 通用换装提示词 + 补充提示词。
+              精修页后来又按用户要求压成两行：第一行三组设置排成一条，第二行提示词 + 用户补充并排。 */}
+          <div className={`composerBody ${isOutfitWorkflow ? "withIntent" : ""} ${isWhiteRefineWorkflow ? "withRetouch" : ""}`}>
             {isOutfitWorkflow && (
               <div className="composerIntentCol">
                 {renderOutfitIntentPanel()}
               </div>
             )}
-            {/* 精修设置：位置和换装的换装设置一致（提示词区左半边），只换内容不换布局。 */}
+            {/* 精修设置：三组选择排成一条，占满整行 —— 下面才是提示词 + 用户补充并排。 */}
             {isWhiteRefineWorkflow && (
-              <div className="composerIntentCol">
+              <div className="retouchSettingsRow">
                 {renderRetouchIntentPanel()}
               </div>
             )}
@@ -11304,7 +11287,7 @@ function buildTasks(countOverride = plannedGenerationCount) {
                     它由「设置 + 补充」自动生成；用户可以随手调整/增删，
                     点设置按钮时会按设置重新生成一遍。 */}
                 <DebouncedTextarea
-                  className={isOutfitWorkflow || isWhiteRefineWorkflow ? "outfitPromptLive" : undefined}
+                  className={isOutfitWorkflow ? "outfitPromptLive" : isWhiteRefineWorkflow ? "retouchPromptLive" : undefined}
                   value={settings.prompt}
                   onChange={(value) => {
                     // 手改提示词：先记下来，别让自动生成立刻盖掉用户写的东西。

@@ -27,6 +27,7 @@ function check(name, pass, detail = "") {
   results.push({ name, pass: Boolean(pass), detail: String(detail) });
 }
 const CLIENT = path.join(process.cwd(), "src", "outfit-workflow.jsx");
+const CSS = path.join(process.cwd(), "src", "features", "outfit", "retouch-intent.css");
 const compiled = (intentPatch = {}, options = {}) => compileRetouchPrompt({
   intent: normalizeRetouchIntent(intentPatch),
   ...options
@@ -206,11 +207,25 @@ check("摘要文案正确（白底精修｜对称：关闭｜衣摆：跟随原�
 
 // ---------- 12) 前端接线（源码级契约，防止后来改坏） ----------
 const clientSource = readFileSync(CLIENT, "utf8");
+const cssSource = readFileSync(CSS, "utf8");
 const panelStart = clientSource.indexOf("function renderRetouchIntentPanel");
 const panelEnd = clientSource.indexOf("function renderResultQueue", panelStart);
 const panelSource = panelStart >= 0 && panelEnd > panelStart ? clientSource.slice(panelStart, panelEnd) : "";
-check("精修设置面板只在精修页渲染，且位于提示词区左半边",
-  /isWhiteRefineWorkflow && \(\s*<div className="composerIntentCol">\s*\{renderRetouchIntentPanel\(\)\}/.test(clientSource));
+check("精修设置面板只在精修页渲染，且包在整行的设置条里",
+  /isWhiteRefineWorkflow && \(\s*<div className="retouchSettingsRow">\s*\{renderRetouchIntentPanel\(\)\}/.test(clientSource));
+check("设置条占满整行（三组排成一条），下面才是提示词 + 用户补充并排",
+  /withRetouch/.test(clientSource)
+    && /\.retouchSettingsRow \{\s*grid-column: 1 \/ -1;/.test(cssSource)
+    && /\.composerBody\.withRetouch \.composerPromptCol \{\s*grid-template-columns: minmax\(0, 1\.25fr\)/.test(cssSource));
+check("提示词框改成定高 + 框内滑动（提示词长了用滑轮看，不撑高整页）",
+  /retouchPromptLive/.test(clientSource)
+    && /textarea\.retouchPromptLive \{[^}]*height: 168px/.test(cssSource)
+    && /textarea\.retouchPromptLive \{[^}]*overflow-y: auto/.test(cssSource),
+  "height:168px + overflow-y:auto");
+check("精修设置面板样式是横向一条（flex + 居中），不再是三行 grid",
+  /\.retouchIntentPanel \{\s*display: flex;\s*flex-wrap: wrap;\s*align-items: center;/.test(cssSource));
+check("换装页布局不受影响（仍然用两栏 withIntent）",
+  /isOutfitWorkflow \? "withIntent" : ""/.test(clientSource));
 check("左侧面板只剩下三组选择按钮：没有标题/说明/摘要/预览/用户补充框",
   panelSource.length > 0
     && !/<header/.test(panelSource)
