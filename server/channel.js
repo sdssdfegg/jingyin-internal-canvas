@@ -407,6 +407,30 @@ export function buildImageRequestVariants(params, files) {
     return variants;
   }
 
+  // New API's billing expression cannot read channelId from multipart fields.
+  // Keep this narrow: only TT 2.5 on Subdirect uses the JSON image_urls path;
+  // every other TT 2.5 line retains the existing multipart request.
+  if (
+    params.model === "tt-image-2.5"
+    && params.channelId === "silent-tt25-line-07"
+    && hasImages
+    && referenceDataUrls.length > 0
+  ) {
+    variants.push({
+      id: "jingyin-tt25-subdirect-json-image-urls",
+      model: params.model,
+      requestFormat: "jingyin-generations-json-image-urls",
+      path: "/images/generations",
+      protocol: "json",
+      headers: { "Content-Type": "application/json" },
+      createBody: () => JSON.stringify({
+        ...buildTextImageBody(params, "legacy"),
+        image_urls: referenceDataUrls
+      })
+    });
+    return variants;
+  }
+
   const addJingyinVariant = (variantParams, suffix, requestFormatSuffix, format) => {
     variants.push({
       id: `jingyin-channel${suffix}`,
