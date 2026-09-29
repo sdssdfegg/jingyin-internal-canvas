@@ -76,6 +76,10 @@ const ROUTING_CHANNELS = Object.freeze([
   { id: "silent-tt25-line-03", label: "XT-default", price: 0.10, model: "tt-image-2.5" },
   { id: "silent-tt25-line-05", label: "云枢", price: 0.10, model: "tt-image-2.5" },
   { id: "silent-tt25-line-04", label: "BR-default特价", price: 0.12, model: "tt-image-2.5" },
+  // 2026-09-28：新增 Subdirect（上游 subdirect.aicodexvip.top，OpenAI-images 协议，
+  // 上游模型 gpt-image-2.5-flare / gpt-image-2.5-sunburst）。追加在末尾，
+  // 不改动既有排序与默认线路（默认线路仍是第一条 Origin）。
+  { id: "silent-tt25-line-07", label: "Subdirect", price: 0.11, model: "tt-image-2.5" },
   // 香蕉 2：仅展示用户指定的三条线路，顺序固定 Subdirect → 云枢 → Origin，三条统一 ¥0.12/张。
   // 数组顺序就是前端菜单顺序（channelsForModel 按白名单顺序输出），不要重排。
   // `silent-banana-line-09` 是 Origin 香蕉 2 的客户端 channelId：它必须由静音中转站

@@ -255,7 +255,11 @@ export const FALLBACK_MODEL_CHANNELS = Object.freeze({
     { id: "silent-tt25-line-02", label: "XT-特殊分组", price: 0.1 },
     { id: "silent-tt25-line-03", label: "XT-default", price: 0.1 },
     { id: "silent-tt25-line-05", label: "云枢", price: 0.1 },
-    { id: "silent-tt25-line-04", label: "BR-default特价", price: 0.12 }
+    { id: "silent-tt25-line-04", label: "BR-default特价", price: 0.12 },
+    // 2026-09-28：新增 Subdirect（上游 subdirect.aicodexvip.top，OpenAI-images 协议，
+    // 上游模型 gpt-image-2.5-flare / gpt-image-2.5-sunburst）。追加在末尾，
+    // 不改动既有排序与默认线路（默认线路仍是第一条 Origin）。
+    { id: "silent-tt25-line-07", label: "Subdirect", price: 0.11 }
   ]),
   // 香蕉 2 / 香蕉 Pro 用白名单本身兜底，不在这里重复维护。
   "banana-2": MODEL_CHANNEL_ALLOWLIST["banana-2"],

@@ -391,6 +391,39 @@ for (const [id, label] of [["silent-tt25-line-01", "XT-image2-s"], ["silent-tt25
   check(`2.5 的 ${label} 通过服务端路由校验`, result2.ok === true, result2.code);
 }
 
+// 2026-09-28 新增：TT Image 2.5 Subdirect（¥0.11，只允许手动选线，只在 2.5 显示）
+const TT25_SUBDIRECT_ID = "silent-tt25-line-07";
+{
+  const found = tt25Channels.find((item) => item.id === TT25_SUBDIRECT_ID);
+  check("2.5 目录里显示 Subdirect（¥0.11）",
+    Boolean(found) && found.label === "Subdirect" && Number(found.price) === 0.11,
+    JSON.stringify(found || null));
+  check("2.5 的 Subdirect 追加在末尾，默认线路仍是第一条 Origin",
+    tt25Channels[0]?.id === "silent-tt25-line-06" && tt25Channels[tt25Channels.length - 1]?.id === TT25_SUBDIRECT_ID,
+    JSON.stringify(tt25Channels.map((item) => `${item.label}/${item.price}`)));
+  const tt25Params = channelModule.normalizeImageRequest({
+    model: "tt-image-2.5", channelId: TT25_SUBDIRECT_ID, prompt: "x", imageSize: "2K", aspectRatio: "3:4"
+  });
+  const tt25Result = channelModule.validateImageRouting(tt25Params);
+  check("2.5 的 Subdirect 通过服务端路由校验", tt25Result.ok === true, tt25Result.code);
+  check("2.5 的 Subdirect 请求带 dispatchMode=manual + 正确 model",
+    tt25Params.channelId === TT25_SUBDIRECT_ID && tt25Params.model === "tt-image-2.5" && tt25Params.dispatchMode === "manual",
+    JSON.stringify({ model: tt25Params.model, channelId: tt25Params.channelId, dispatchMode: tt25Params.dispatchMode }));
+  for (const other of ["banana-2", "nano-banana-pro", "tt-image-2"]) {
+    const rows = routingModule.channelsForModel(other, catalog);
+    check(`2.5 的 Subdirect 不出现在 ${other} 菜单里`,
+      !rows.some((item) => item.id === TT25_SUBDIRECT_ID),
+      JSON.stringify(rows.map((item) => item.id)));
+    const cross = channelModule.normalizeImageRequest({
+      model: other, channelId: TT25_SUBDIRECT_ID, prompt: "x", imageSize: "2K", aspectRatio: "3:4"
+    });
+    const crossResult = channelModule.validateImageRouting(cross);
+    check(`${other} 带上 2.5 Subdirect 的 channelId 被服务端拒绝`,
+      crossResult.ok === false,
+      crossResult.code);
+  }
+}
+
 // 老存档里选着已下线渠道时，必须能自动收敛到合法线路
 const legacyTt2 = routingModule.convergeSettingsForModel({ model: "tt-image-2", channelId: "silent-tt2-line-04" }, catalog);
 check("老存档选了已下线渠道 → 自动收敛到合法线路",
