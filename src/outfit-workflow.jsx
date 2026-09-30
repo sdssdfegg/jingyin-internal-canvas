@@ -60,7 +60,6 @@ import {
   canonicalModel,
   channelsForModel,
   convergeSettingsForModel,
-  isBanana2Model,
   modelCapabilities,
   routingFields
 } from "./shared/routing.js";
@@ -105,7 +104,6 @@ import {
   pickSaveDirectory as pickSaveDirectoryRequest,
   setSaveDirectory as setSaveDirectoryRequest
 } from "./api/save.js";
-import { generateImages } from "./api/images.js";
 import { analyzeOutfitMasterFit, checkOutfitQuality, generateOutfit } from "./api/outfit.js";
 import { displayImageRequestUrl, fetchImageBlob } from "./api/assets.js";
 import { emitClientDiagnosticEvent } from "./api/client.js";
@@ -418,7 +416,6 @@ const LOCAL_EDIT_CROP_UPLOAD_TARGET_BYTES = 16 * 1024 * 1024;
 const LOCAL_EDIT_CROP_JPEG_QUALITIES = [0.98, 0.96, 0.94, 0.92];
 const LOCAL_EDIT_OUTPUT_TARGET_BYTES = 64 * 1024 * 1024;
 const LOCAL_EDIT_OUTPUT_JPEG_QUALITIES = [0.985, 0.975, 0.965, 0.95, 0.94];
-const LOCAL_EDIT_SHARPEN_MAX_PIXELS = 9_000_000;
 const DEFAULT_BATCH_CONCURRENCY = 5;
 const LOCAL_EDIT_BATCH_CONCURRENCY = 5;
 const LOCAL_EDIT_BATCH_PREPARE_CONCURRENCY = 2;
@@ -484,7 +481,6 @@ const RESIZE_FORMAT_OPTIONS = [
 const RESIZE_SETTINGS_KEY = "jingyin-outfit-workflow-resize-settings-v4";
 const RESIZE_BATCH_CROP_KEY = "jingyin-outfit-workflow-resize-batch-crop-v1";
 const RESIZE_OUTPUT_FOLDER = "批量尺寸导出";
-const LOCAL_DETAIL_OUTPUT_FOLDER = "局部回贴";
 const DEFAULT_UPLOAD_LABELS = {
   model: {
     title: "带场景模特图",
@@ -6292,378 +6288,7 @@ function BatchResizePanel({
   );
 }
 
-function buildLocalDetailPrompt(userPrompt, referenceCount = 0, model = "") {
-  const request = String(userPrompt || "").trim() || "在图1选区内按文字或图2结构参考修改局部服装细节。";
-  const isBanana2 = isBanana2Model(model);
-  return [
-    "【局部服装细节 Skill】",
-    "任务：只修改图1局部选区内用户点名的服装面料或服装细节，例如衣领、袖口、荷包、口袋、扣子、拉链、拼接线、局部纹理、局部瑕疵。",
-    "图1局部来自原图固定坐标；主体位置、人物姿态、脸、头颈、身体比例、手脚、背景、光影和选区外内容不改变。",
-    "只处理用户点名目标；未点名的衣身、裤子、裙子、皮肤、背景和其它服装区域保持图1原图观感。",
-    "图1是颜色、基础材质、明暗、纹理方向、清晰度和光影关系的唯一事实来源；新细节必须像原本就长在图1这件衣服上。",
-    referenceCount > 0
-      ? `本次有 ${referenceCount} 张图2参考图：只参考被点名局部细节的形状、结构、位置关系、五金样式、缝线方式或纹理走势；不要参考图2的颜色、色温、曝光、整体材质颜色或背景，不要把图2扩展成整件换装。`
-      : "没有图2参考时，不要凭空大改版型或新增复杂装饰，只按文字做保守局部调整。",
-    "选区边缘必须延续图1原图颜色、材质、明暗、纹理方向和清晰度，避免突兀色块、断层、错位或新增花纹。",
-    isBanana2
-      ? "Nano Banana 2：短句硬锁，局部结果必须保持原坐标关系，不要重新摆拍、移动头颈、改变肩线或重排身体。"
-      : "输出画布比例和局部选区一致，保持原构图、原角度和原光影。",
-    "【用户局部需求】",
-    request
-  ].join("\n");
-}
 
-function LocalDetailPanel({
-  saveDirectory,
-  onChooseDirectory,
-  onOpenSaveDirectory,
-  onSaveImage,
-  onAddEvent,
-  onPreview,
-  apiKey = "",
-  defaultModel = "tt-image-2",
-  defaultImageSize = "2K",
-  defaultRatio = "3:4"
-}) {
-  const [baseImages, setBaseImages] = useState([]);
-  const [referenceImages, setReferenceImages] = useState([]);
-  const [ratio, setRatio] = useState(BATCH_RATIO_OPTIONS.includes(defaultRatio) ? defaultRatio : "3:4");
-  const [model, setModel] = useState(canonicalModel(defaultModel || "tt-image-2"));
-  const [imageSize, setImageSize] = useState(defaultImageSize || "2K");
-  const [prompt, setPrompt] = useState("在图1选区内修改点名的服装细节，颜色和整体材质以图1原产品为主。");
-  const [generatedResult, setGeneratedResult] = useState(null);
-  const [cropTarget, setCropTarget] = useState(null);
-  const [cropTemplate, setCropTemplate] = useState(null);
-  const [working, setWorking] = useState(false);
-  const [status, setStatus] = useState("上传图1原图并框选需要修改的服装区域，生成后会自动贴回原图同一坐标。");
-  const baseImagesRef = useRef([]);
-  const referenceImagesRef = useRef([]);
-  const generatedResultRef = useRef(null);
-
-  const selectedBase = baseImages.find((item) => item.selected) || baseImages[0] || null;
-  const selectedReferences = referenceImages.filter((item) => item.selected);
-  const targetSize = outputSizeForRatio(ratio, 2048);
-
-  useEffect(() => {
-    baseImagesRef.current = baseImages;
-  }, [baseImages]);
-
-  useEffect(() => {
-    referenceImagesRef.current = referenceImages;
-  }, [referenceImages]);
-
-  useEffect(() => {
-    generatedResultRef.current = generatedResult;
-  }, [generatedResult]);
-
-  useEffect(() => () => {
-    baseImagesRef.current.forEach(revokeImageUrls);
-    referenceImagesRef.current.forEach(revokeImageUrls);
-    if (generatedResultRef.current?.url) URL.revokeObjectURL(generatedResultRef.current.url);
-  }, []);
-
-  useEffect(() => {
-    if (defaultModel) setModel(defaultModel);
-  }, [defaultModel]);
-
-  useEffect(() => {
-    if (defaultImageSize) setImageSize(defaultImageSize);
-  }, [defaultImageSize]);
-
-  async function addLocalImages(group, files) {
-    const currentItems = group === "base" ? baseImages : referenceImages;
-    const allowed = Math.max(0, MAX_UPLOAD_IMAGES - currentItems.length);
-    if (allowed <= 0) {
-      setStatus(`每个区域最多上传 ${MAX_UPLOAD_IMAGES} 张图片`);
-      return;
-    }
-    const acceptedFiles = Array.from(files || []).filter(isImageFile).slice(0, allowed);
-    if (!acceptedFiles.length) return;
-
-    const items = [];
-    for (const file of acceptedFiles) {
-      try {
-        items.push(await createImageItem(file, ratio, "original"));
-      } catch (error) {
-        setStatus(`${file.name} 读取失败：${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-    if (!items.length) return;
-
-    if (group === "base") setBaseImages((current) => [...current, ...items]);
-    else setReferenceImages((current) => [...current, ...items]);
-
-    const label = group === "base" ? "主图" : "参考图";
-    setStatus(`已加入 ${items.length} 张${label}`);
-    onAddEvent?.("局部回贴", `已加入 ${items.length} 张${label}`);
-  }
-
-  function removeLocalImage(group, id) {
-    const update = (items) => {
-      const target = items.find((item) => item.id === id);
-      revokeImageUrls(target);
-      return items.filter((item) => item.id !== id);
-    };
-    if (group === "base") setBaseImages(update);
-    else setReferenceImages(update);
-    if (cropTarget?.id === id) setCropTarget(null);
-    if (cropTemplate?.sourceId === id) setCropTemplate(null);
-  }
-
-  function toggleLocalImage(group, id) {
-    const update = (items) => items.map((item) => item.id === id ? { ...item, selected: !item.selected } : item);
-    if (group === "base") setBaseImages(update);
-    else setReferenceImages(update);
-  }
-
-  function reorderLocalImage(group, fromId, toId, placement) {
-    const update = (items) => moveItemByDrop(items, fromId, toId, placement);
-    if (group === "base") setBaseImages(update);
-    else setReferenceImages(update);
-  }
-
-  function applyLocalCropTemplate(crop) {
-    if (!crop || !cropTarget) {
-      setStatus("没有读取到有效局部区域，请重新选择");
-      setCropTarget(null);
-      return;
-    }
-    setCropTemplate({ ...crop, sourceId: cropTarget.id });
-    setCropTarget(null);
-    setStatus("已记录局部区域；后续生成贴回会优先围绕这个区域处理");
-  }
-
-  async function saveGeneratedResult() {
-    if (!generatedResult?.file) return;
-    if (!saveDirectory) {
-      setStatus("请先指定保存文件夹，再保存贴回结果");
-      onChooseDirectory?.();
-      return;
-    }
-    try {
-      const payload = await onSaveImage(generatedResult.file, LOCAL_DETAIL_OUTPUT_FOLDER);
-      setStatus(`已保存贴回图：${payload?.filename || generatedResult.file.name}`);
-      onAddEvent?.("局部回贴", `已保存到 ${LOCAL_DETAIL_OUTPUT_FOLDER}`);
-    } catch (error) {
-      setStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  async function generateLocalDetail() {
-    if (working) return;
-    if (!apiKey) {
-      setStatus("请先在设置里填写 API Key");
-      return;
-    }
-    if (!selectedBase) {
-      setStatus("请先上传并选中一张主图");
-      return;
-    }
-    if (!cropTemplate) {
-      setStatus("请先选择要局部修改的区域");
-      return;
-    }
-    setWorking(true);
-    setStatus("正在生成局部补丁并贴回原图...");
-    try {
-      const localEdit = await cropOutfitLocalEditFile(selectedBase, cropTemplate, "local_detail");
-      const form = new FormData();
-      form.set("apiKey", apiKey);
-      // 局部回贴也走 /api/images，同样必须带 canonical 路由字段。
-      const localRoute = routingFields(model, "", null);
-      form.set("model", localRoute.model);
-      form.set("channelId", localRoute.channelId);
-      form.set("dispatchMode", localRoute.dispatchMode);
-      form.set("imageSize", imageSize);
-      form.set("aspectRatio", localEdit.aspectRatio || ratio);
-      form.set("n", "1");
-      form.set("source", "local-detail");
-      form.set("deferAutoSave", "1");
-      form.set("prompt", buildLocalDetailPrompt(prompt, selectedReferences.length, model));
-      form.append("image", localEdit.cropFile, `local_${selectedBase.name}`);
-      selectedReferences.forEach((item, index) => {
-        const file = item.file || item.originalFile;
-        if (file instanceof File) form.append("image", file, `ref_${index + 1}_${item.name}`);
-      });
-
-      const payload = await generateImages(form);
-      if (!payload.images?.[0]) throw new Error("接口返回成功，但没有解析到图片");
-
-      const generatedBlob = await blobFromOutfitImage(payload.images[0]);
-      // 2026-09-25 对齐 3.0：局部回贴不做自动对齐 / 颜色匹配 / 中性色调匹配 / 羽化。
-      const composedBlob = await composeOutfitLocalEditBlob(
-        resolveLocalEditBaseFile(selectedBase),
-        generatedBlob,
-        localEdit.cropRect,
-        localEdit
-      );
-      const resultFile = fileFromBlob(composedBlob, `${fileBaseName(selectedBase.name || "local-detail")}_局部贴回`, "image/png");
-      const url = URL.createObjectURL(composedBlob);
-      await preloadImageUrl(url);
-      setGeneratedResult((current) => {
-        if (current?.url) URL.revokeObjectURL(current.url);
-        return { file: resultFile, url, timingMs: payload.timing?.totalMs || 0 };
-      });
-      onAddEvent?.("局部回贴", "局部补丁已生成并贴回原图");
-
-      if (saveDirectory) {
-        const saved = await onSaveImage(resultFile, LOCAL_DETAIL_OUTPUT_FOLDER);
-        setStatus(`生成完成并已保存：${saved?.filename || resultFile.name}`);
-      } else {
-        setStatus("生成完成；未指定保存文件夹，点击保存贴回图可保存。");
-      }
-    } catch (error) {
-      setStatus(`生成失败：${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  return (
-    <section className="localDetailPanel">
-      <header className="moduleHeader">
-        <div>
-          <h2>局部回贴</h2>
-          <span>在图1大图里框选服装局部，按需求生成补丁后自动贴回原图同一坐标。</span>
-        </div>
-        <div className="moduleHeaderActions">
-          <button className="toolbarButton" type="button" onClick={onChooseDirectory}>
-            <FolderOpen size={15} />
-            <span>指定文件夹</span>
-          </button>
-          <button className="toolbarButton" type="button" onClick={onOpenSaveDirectory}>
-            <FolderOpen size={15} />
-            <span>打开保存目录</span>
-          </button>
-        </div>
-      </header>
-
-      <div className="localDetailLayout">
-        <UploadZone
-          primary
-          title="图1：原图 / 待回贴区域"
-          hint="上传需要局部修改的大图；先框选服装区域，生成结果会贴回这张原图。"
-          items={baseImages}
-          onPick={(files) => addLocalImages("base", files)}
-          onRemove={(id) => removeLocalImage("base", id)}
-          onToggle={(id) => toggleLocalImage("base", id)}
-          onReorder={(fromId, toId, placement) => reorderLocalImage("base", fromId, toId, placement)}
-          onPreview={(item) => onPreview?.({ title: item.name, src: item.previewUrl })}
-          onOpenCrop={(item) => setCropTarget({ ...item, mode: "crop" })}
-          maxCount={MAX_UPLOAD_IMAGES}
-          onLimit={(message) => setStatus(message)}
-          showBulkControl={false}
-        />
-
-        <section className="localDetailSide">
-          <UploadZone
-            compact
-            title="图2：细节结构参考"
-            hint="可选；只参考细节形状、结构、五金样式或纹理走势，不参考颜色。"
-            items={referenceImages}
-            onPick={(files) => addLocalImages("reference", files)}
-            onRemove={(id) => removeLocalImage("reference", id)}
-            onToggle={(id) => toggleLocalImage("reference", id)}
-            onReorder={(fromId, toId, placement) => reorderLocalImage("reference", fromId, toId, placement)}
-            onPreview={(item) => onPreview?.({ title: item.name, src: item.previewUrl })}
-            onOpenCrop={(item) => setCropTarget({ ...item, mode: "crop" })}
-            maxCount={MAX_UPLOAD_IMAGES}
-            onLimit={(message) => setStatus(message)}
-            showBulkControl={false}
-          />
-
-          <section className="localActionPanel">
-            <header>
-              <div>
-                <h3>回贴生成</h3>
-                <span>修改衣领、袖口、荷包、面料纹理等细节，颜色和光影跟图1一致。</span>
-              </div>
-            </header>
-            <label className="field localPromptField">
-              <span>局部回贴提示词</span>
-              <textarea
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                placeholder="例如：把袖口改成图2这种收口结构，颜色和材质跟图1衣服保持一致。"
-              />
-            </label>
-            <div className="localOptionGrid">
-              <label className="field">
-                <span>模型</span>
-                <select value={model} onChange={(event) => setModel(event.target.value)}>
-                  {DEFAULT_MODELS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>清晰度</span>
-                <select value={imageSize} onChange={(event) => setImageSize(event.target.value)}>
-                  {modelCapabilities(model).sizes.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <label className="field">
-              <span>局部输出比例</span>
-              <select value={ratio} onChange={(event) => setRatio(event.target.value)}>
-                {BATCH_LOCAL_EDIT_RATIOS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <div className="localMetric">
-              <strong>{targetSize.width} × {targetSize.height}</strong>
-              <span>{cropTemplate ? "已选择局部回贴区域" : "请先选择局部回贴区域"}</span>
-            </div>
-            <div className="localActionButtons">
-              <button className="smallButton" type="button" onClick={() => selectedBase && setCropTarget({ ...selectedBase, mode: "crop" })} disabled={!selectedBase}>
-                <Scissors size={15} />
-                <span>选择回贴区域</span>
-              </button>
-              <button className="generateButton" type="button" onClick={generateLocalDetail} disabled={working || !selectedBase || !cropTemplate}>
-                {working ? <Loader2 className="spin" size={16} /> : <Play size={16} />}
-                <span>{working ? "生成中" : "生成贴回"}</span>
-              </button>
-              <button className="secondaryButton" type="button" onClick={saveGeneratedResult} disabled={!generatedResult?.file}>
-                <Save size={15} />
-                <span>保存贴回图</span>
-              </button>
-            </div>
-            {generatedResult?.url && (
-              <button
-                className="localResultPreview"
-                type="button"
-                onClick={() => onPreview?.({ title: "局部回贴结果", src: generatedResult.url })}
-              >
-                <img src={generatedResult.url} alt="" />
-                <span>点击预览贴回结果</span>
-              </button>
-            )}
-            <p>{status}</p>
-          </section>
-        </section>
-      </div>
-
-      {cropTarget && (
-        <CropModal
-          item={cropTarget}
-          ratio={ratio}
-          initialMode="crop"
-          title="局部回贴区域"
-          subtitle={`${cropTarget.name} · ${targetSize.width} × ${targetSize.height}`}
-          footerText="拖动画面选择要重绘并回贴的服装区域，滚轮缩放；确认后生成结果会贴回原图同一坐标。"
-          modeOptions={[["crop", "回贴区域"]]}
-          collectOnly
-          onCollectCrop={applyLocalCropTemplate}
-          onClose={() => setCropTarget(null)}
-          onApply={() => {}}
-        />
-      )}
-    </section>
-  );
-}
 
 const QUICK_VIDEO_DEFAULTS = {
   model: "seedance-2.0",
@@ -10234,12 +9859,6 @@ function buildTasks(countOverride = plannedGenerationCount) {
       revokeResultImageRuntimeCache(previousTask.result);
       addEvent("重刷完成", `#${task.order || ""} 已用新结果覆盖原图`);
     } catch (error) {
-      const latestTask = tasksRef.current.find((item) => item.id === runnableTask.id);
-      const stageDetail = taskRuntimeStageLabel(latestTask);
-      const errorDetail = [
-        stageDetail ? `失败阶段：${stageDetail}` : "",
-        sanitizeErrorText(error?.detail || (error instanceof Error ? error.message : String(error)))
-      ].filter(Boolean).join("\n");
       setTasks((current) => current.map((item) => item.id === runnableTask.id ? {
         ...previousTask,
         error: "",
