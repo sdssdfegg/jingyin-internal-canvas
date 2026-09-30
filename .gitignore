@@ -89,3 +89,8 @@ Thumbs.db
 # 且已按快照基线口径排除（*.zip 不进基线）。保留在磁盘，不进 Git，避免二进制副本重复。
 # 注意：API/代码模板/*.tar.gz 在批准快照基线内，仍正常入库，不在此排除。
 API/代码模板/*.zip
+
+# ---- 自动生成的源码文件（由 scripts/generate-static-assets.mjs 生成，不进 Git）----
+# 运行时由 `npm run build:assets` 重新生成；README 明确"不手工维护"。
+# 纳入版本库会导致每次小改都是 3.3MB diff，长期显著膨胀仓库。
+server/static-assets.generated.js
