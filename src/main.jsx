@@ -18,6 +18,7 @@ import {
   Flame,
   Folder,
   FolderOpen,
+  HardDrive,
   Image as ImageIcon,
   ImageOff,
   KeyRound,
@@ -98,6 +99,11 @@ import {
   deleteHistoryResults,
   getHistoryResults
 } from "./api/history.js";
+import {
+  cleanStorageTargets,
+  getStorageUsage,
+  revealStorageDir
+} from "./api/storage.js";
 import { generateImages } from "./api/images.js";
 import {
   createDetailPrompts,
@@ -1441,6 +1447,23 @@ async function fileToCompactJpegDataUrl(file, maxEdge = 1536, quality = 0.85) {
 
 // 需要走 JSON + image_urls 参考图通道的模型（对齐 3.0 的带图路径）。
 const JSON_IMAGE_URLS_MODELS = new Set(["nano-banana-pro"]);
+
+/**
+ * 2026-09-29（v3.7）：把字节数格式化成人类可读的存储占用文案。
+ * 只用于设置页的"数据与存储"区块，不做任何业务计算。
+ */
+function formatStorageSize(bytes) {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size >= 100 || unit === 0 ? Math.round(size) : size.toFixed(1)} ${units[unit]}`;
+}
 
 async function imageBitmapFromBlob(blob) {
   if (window.createImageBitmap) {
@@ -2823,6 +2846,59 @@ function App() {
   const [, setTiming] = useState(null);
   const [events, setEvents] = useState([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // 2026-09-29（v3.7）：数据与存储（用量 / 打开目录 / 清理）。
+  // 封装版的数据目录不在安装包内，用户看不到路径也删不掉历史图片，
+  // 于是"清空全部"后文件仍在、重启就被扫描重建。这里给出自助入口。
+  const [storageUsage, setStorageUsage] = useState(null);
+  const [storageBusy, setStorageBusy] = useState("");
+  const [storageStatus, setStorageStatus] = useState("");
+
+  const refreshStorageUsage = async () => {
+    try {
+      const data = await getStorageUsage();
+      if (data?.ok) setStorageUsage(data);
+    } catch (error) {
+      setStorageStatus(`读取存储用量失败：${error?.message || error}`);
+    }
+  };
+
+  useEffect(() => {
+    if (!isSettingsOpen) return;
+    setStorageStatus("");
+    void refreshStorageUsage();
+  }, [isSettingsOpen]);
+
+  const handleRevealStorage = async (target) => {
+    try {
+      const data = await revealStorageDir(target);
+      setStorageStatus(data?.ok ? `已打开：${data.path}` : `打开失败：${data?.error || "未知错误"}`);
+    } catch (error) {
+      setStorageStatus(`打开失败：${error?.message || error}`);
+    }
+  };
+
+  const handleCleanStorage = async (targets, label) => {
+    const confirmed = window.confirm(`确定清理${label}吗？\n\n这会直接删除磁盘上的文件，无法撤销。`);
+    if (!confirmed) return;
+    setStorageBusy(targets.join(","));
+    setStorageStatus(`正在清理${label}…`);
+    try {
+      const data = await cleanStorageTargets(targets);
+      if (data?.ok) {
+        setStorageUsage(data);
+        const removed = (data.report || []).reduce((sum, item) => sum + (item.removedFiles || 0), 0);
+        const freed = (data.report || []).reduce((sum, item) => sum + (item.freedBytes || 0), 0);
+        setStorageStatus(`${label}完成：删除 ${removed} 个文件，释放 ${formatStorageSize(freed)}`);
+      } else {
+        setStorageStatus(`清理失败：${data?.error || "未知错误"}`);
+      }
+    } catch (error) {
+      setStorageStatus(`清理失败：${error?.message || error}`);
+    } finally {
+      setStorageBusy("");
+    }
+  };
   const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
   const [apiSaveStatus, setApiSaveStatus] = useState("");
   // 2026-09-25：设置里原有的「开发诊断」区域（含传参自检按钮）已整体替换为「连接测试」。
@@ -8364,6 +8440,73 @@ function App() {
               {connectionStatus && (
                 <small className={`fieldHint connectionHint ${connectionState}`}>{connectionStatus}</small>
               )}
+            </div>
+
+            <div className="debugBlock storageBlock">
+              <span><HardDrive size={15} /> 数据与存储</span>
+              <p>
+                生成的图片、上传的参考图和日志都保存在本机数据目录，<strong>不在安装包内</strong>。
+                清理会直接删除磁盘文件，无法撤销。
+              </p>
+              {storageUsage ? (
+                <>
+                  <div className="storagePathRow">
+                    <code title={storageUsage.dataDir}>{storageUsage.dataDir}</code>
+                    <button className="smallButton" type="button" onClick={() => void handleRevealStorage("data")}>
+                      <FolderOpen size={15} />
+                      <span>打开目录</span>
+                    </button>
+                  </div>
+                  <ul className="storageList">
+                    {(storageUsage.items || []).map((item) => (
+                      <li key={item.key}>
+                        <span>{item.label}</span>
+                        <em>{item.files} 个 / {formatStorageSize(item.bytes)}</em>
+                      </li>
+                    ))}
+                    <li>
+                      <span>历史记录条数</span>
+                      <em>{storageUsage.historyCount} 条</em>
+                    </li>
+                  </ul>
+                </>
+              ) : (
+                <small className="fieldHint">正在读取存储用量…</small>
+              )}
+              <div className="debugActions">
+                <button
+                  className="smallButton"
+                  type="button"
+                  disabled={Boolean(storageBusy)}
+                  onClick={() => void handleCleanStorage(["historyImages"], "历史图片（含历史清单）")}
+                >
+                  <Trash2 size={15} />
+                  <span>清理历史图片</span>
+                </button>
+                <button
+                  className="smallButton"
+                  type="button"
+                  disabled={Boolean(storageBusy)}
+                  onClick={() => void handleCleanStorage(["references"], "参考图缓存")}
+                >
+                  <Trash2 size={15} />
+                  <span>清理参考图</span>
+                </button>
+                <button
+                  className="smallButton"
+                  type="button"
+                  disabled={Boolean(storageBusy)}
+                  onClick={() => void handleCleanStorage(["results", "canvasAssets"], "结果图缓存")}
+                >
+                  <Trash2 size={15} />
+                  <span>清理结果缓存</span>
+                </button>
+                <button className="smallButton" type="button" onClick={() => void refreshStorageUsage()}>
+                  <RefreshCw size={15} />
+                  <span>刷新</span>
+                </button>
+              </div>
+              {storageStatus && <small className="fieldHint">{storageStatus}</small>}
             </div>
           </section>
         </div>

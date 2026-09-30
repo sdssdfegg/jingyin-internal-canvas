@@ -1125,8 +1125,23 @@ async function recoverHistoryFromImageFiles() {
 }
 
 async function readHistoryResults() {
-  const primary = (await readJsonArray(historyFile)).map(normalizeHistoryItem).filter(Boolean);
-  if (primary.length > 0) return primary;
+  // 2026-09-29（v3.7）：区分「history.json 不存在」与「history.json 存在但为空数组」。
+  // 旧逻辑只要解析结果为空，就会继续从 history.backup.json、再退到扫描 history-images 目录，
+  // 把记录"复活"回来。实测封装版里 357 条历史全部是 recovered=true（无提示词），
+  // 因此用户点「清空全部」后重启，历史又全部出现。
+  // 现在：只要 history.json 在，就完全以它的内容为准（空数组同样尊重），
+  // 只有文件缺失或损坏时才走备份/图片扫描恢复，保留老用户迁移能力。
+  if (existsSync(historyFile)) {
+    const raw = await readFile(historyFile, "utf8").catch(() => null);
+    if (raw !== null) {
+      try {
+        const parsed = JSON.parse(raw);
+        return (Array.isArray(parsed) ? parsed : []).map(normalizeHistoryItem).filter(Boolean);
+      } catch {
+        // JSON 损坏：继续走下面的备份 / 图片扫描恢复
+      }
+    }
+  }
 
   const backup = (await readJsonArray(historyBackupFile)).map(normalizeHistoryItem).filter(Boolean);
   if (backup.length > 0) {
@@ -4210,6 +4225,134 @@ app.delete("/api/history", async (req, res) => {
   const results = current.filter((item) => !ids.includes(item.id));
   await writeHistoryResults(results, { replaceBackup: results.length === 0 });
   res.json({ ok: true, total: results.length });
+});
+
+// ---------------------------------------------------------------------------
+// 2026-09-29（v3.7）：数据与存储自助接口。
+// 背景：历史图/参考图/结果缓存都写在数据目录（封装版为 %LOCALAPPDATA%\静音AI绘画数据），
+// 用户既看不到路径，也没有能真正清掉文件的手段（只清 history.json 会被图片扫描复活）。
+// 这里提供：用量查询 / 打开数据目录 / 安全清理（只删固定目录下的普通文件，
+// 图片类目录只删图片扩展名；清历史图片时同时把历史清单置空并覆盖备份）。
+const STORAGE_TARGETS = [
+  { key: "historyImages", label: "历史图片", resolve: () => historyImageDir, imagesOnly: true, resetsHistory: true },
+  { key: "references", label: "参考图缓存", resolve: () => referenceAssetDir, imagesOnly: true },
+  { key: "results", label: "结果图缓存", resolve: () => resultDir, imagesOnly: true },
+  { key: "canvasAssets", label: "画布资源", resolve: () => canvasAssetDir, imagesOnly: true },
+  { key: "logs", label: "运行日志", resolve: () => path.join(rootDir, "logs"), imagesOnly: false },
+  { key: "tmpUploads", label: "上传临时文件", resolve: () => uploadTempDir, imagesOnly: false }
+];
+const STORAGE_IMAGE_PATTERN = /\.(png|jpe?g|webp|gif|bmp)$/i;
+
+async function storageDirUsage(dir) {
+  let files = 0;
+  let bytes = 0;
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      try {
+        const info = await stat(path.join(dir, entry.name));
+        files += 1;
+        bytes += info.size;
+      } catch {
+        // 单个文件读不到就跳过，不影响整体统计
+      }
+    }
+  } catch {
+    // 目录不存在视为 0
+  }
+  return { files, bytes };
+}
+
+async function storageUsageSnapshot() {
+  const items = [];
+  let totalBytes = 0;
+  for (const target of STORAGE_TARGETS) {
+    const dir = target.resolve();
+    const usage = await storageDirUsage(dir);
+    totalBytes += usage.bytes;
+    items.push({ key: target.key, label: target.label, path: dir, files: usage.files, bytes: usage.bytes });
+  }
+  const history = await readHistoryResults();
+  return {
+    rootDir,
+    dataDir,
+    logsDir: path.join(rootDir, "logs"),
+    items,
+    totalBytes,
+    historyCount: history.length
+  };
+}
+
+app.get("/api/storage/usage", async (_req, res) => {
+  try {
+    res.json({ ok: true, ...(await storageUsageSnapshot()) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error?.message || String(error) });
+  }
+});
+
+app.post("/api/storage/reveal", async (req, res) => {
+  const which = String(req.body?.target || "data");
+  const target = STORAGE_TARGETS.find((item) => item.key === which);
+  const dir = target ? target.resolve() : dataDir;
+  try {
+    await mkdir(dir, { recursive: true });
+    if (process.platform === "win32") {
+      spawn("explorer.exe", [dir], { detached: true, stdio: "ignore" }).unref();
+    } else if (process.platform === "darwin") {
+      spawn("open", [dir], { detached: true, stdio: "ignore" }).unref();
+    } else {
+      spawn("xdg-open", [dir], { detached: true, stdio: "ignore" }).unref();
+    }
+    res.json({ ok: true, path: dir });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error?.message || String(error), path: dir });
+  }
+});
+
+app.post("/api/storage/clean", async (req, res) => {
+  const requested = Array.isArray(req.body?.targets) ? req.body.targets.map(String) : [];
+  const chosen = STORAGE_TARGETS.filter((item) => requested.includes(item.key));
+  if (chosen.length === 0) {
+    return res.status(400).json({ ok: false, error: "no_targets" });
+  }
+  const report = [];
+  for (const target of chosen) {
+    const dir = target.resolve();
+    let removedFiles = 0;
+    let freedBytes = 0;
+    let skipped = 0;
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isFile()) {
+          skipped += 1;
+          continue;
+        }
+        if (target.imagesOnly && !STORAGE_IMAGE_PATTERN.test(entry.name)) {
+          skipped += 1;
+          continue;
+        }
+        const file = path.join(dir, entry.name);
+        try {
+          const info = await stat(file);
+          await unlink(file);
+          removedFiles += 1;
+          freedBytes += info.size;
+        } catch {
+          skipped += 1;
+        }
+      }
+    } catch {
+      // 目录不存在等：视为已经清空
+    }
+    if (target.resetsHistory) {
+      await writeHistoryResults([], { replaceBackup: true });
+    }
+    report.push({ key: target.key, label: target.label, path: dir, removedFiles, freedBytes, skipped });
+  }
+  res.json({ ok: true, report, ...(await storageUsageSnapshot()) });
 });
 
 app.get("/api/history-image/:filename", async (req, res) => {

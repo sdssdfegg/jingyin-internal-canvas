@@ -13,9 +13,9 @@ const releaseParentDir = path.resolve(rootDir, "..");
 // 发布身份（可配置，默认就是本次要发的这一版）。
 // 换版本号/产品名只改环境变量即可，不用动脚本：
 //   JINGYIN_WIN_RELEASE_NAME / JINGYIN_WIN_PRODUCT_NAME / JINGYIN_WIN_PRODUCT_VERSION
-const releaseName = String(process.env.JINGYIN_WIN_RELEASE_NAME || "静音AI画板（v3.6）").trim();
+const releaseName = String(process.env.JINGYIN_WIN_RELEASE_NAME || "静音AI画板（v3.7）").trim();
 const productName = String(process.env.JINGYIN_WIN_PRODUCT_NAME || "静音AI画板").trim();
-const productVersion = String(process.env.JINGYIN_WIN_PRODUCT_VERSION || "3.6.0").trim();
+const productVersion = String(process.env.JINGYIN_WIN_PRODUCT_VERSION || "3.7.0").trim();
 const defaultReleaseDir = path.join(releaseParentDir, releaseName);
 const releaseDir = path.resolve(process.env.JINGYIN_WIN_RELEASE_DIR || defaultReleaseDir);
 const exeName = `${productName}.exe`;
@@ -186,11 +186,16 @@ await obfuscateFile(protectedServerBundle, {
 });
 
 console.log("6/8 Build Node SEA blob");
+// 2026-09-29（v3.7）：useCodeCache 必须关掉。
+// 实测 Node v24.9.0 + 本次混淆后 9.9MB 的 server bundle，开启 code cache 会让
+// `node --experimental-sea-config` 直接崩溃（exit 3221226505 = 0xC0000409
+// STATUS_STACK_BUFFER_OVERRUN），v3.7 打包就卡在这一步；同一 bundle 关掉后正常产出 9.9MB blob。
+// code cache 只是启动期编译缓存，关掉不影响功能，仅冷启动略慢。
 await writeFile(seaConfigFile, JSON.stringify({
   main: protectedServerBundle,
   output: seaBlob,
   disableExperimentalSEAWarning: true,
-  useCodeCache: true
+  useCodeCache: false
 }, null, 2), "utf8");
 await run(process.execPath, ["--experimental-sea-config", seaConfigFile]);
 
@@ -227,13 +232,23 @@ if (process.platform === "win32") {
   ]);
 }
 
-await run(localBin("postject"), [
+// 2026-09-29（v3.7）：postject 改为直接用 node 调 dist/cli.js。
+// 走 node_modules/.bin/postject.cmd 要经过 cmd.exe，在中文发布路径下曾出现
+// wasm 内存分配失败（WebAssembly.instantiate(): Out of memory: Cannot allocate Wasm memory），
+// 直接调用同一个 CLI 则稳定注入成功。
+const postjectCli = path.join(rootDir, "node_modules", "postject", "dist", "cli.js");
+const postjectArgs = [
   releaseExe,
   "NODE_SEA_BLOB",
   seaBlob,
   "--sentinel-fuse",
   "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2"
-]);
+];
+if (existsSync(postjectCli)) {
+  await run(process.execPath, [postjectCli, ...postjectArgs]);
+} else {
+  await run(localBin("postject"), postjectArgs);
+}
 
 console.log("8/8 Write release notes and checksum");
 const exeInfo = await stat(releaseExe);
@@ -431,6 +446,17 @@ await writeFile(path.join(releaseDir, "使用说明.txt"), `\uFEFF${[
   "3. 联系管理员兑换算力：15871470202（手机微信同号）。",
   "4. 回到软件前端服务器页面，填写自己的 KEY 后即可使用。",
   "",
+  "数据存放位置（重要）：",
+  "1. 历史图片、上传的参考图、结果缓存和日志都不在安装包里，而是保存在你的用户目录：",
+  "   %LOCALAPPDATA%\\静音AI绘画数据\\",
+  "2. 想查看/清理这些文件：打开软件 → 左下角「设置」→「数据与存储」，可直接“打开目录”，",
+  "   也可以分别“清理历史图片”“清理参考图”“清理结果缓存”（会真正删除磁盘文件，无法撤销）。",
+  "3. 只点界面上的清空按钮、但磁盘图片还在时，历史会在下次启动被扫描重建；",
+  "   要彻底清空，请用上面的“清理历史图片”。",
+  "4. 想让数据落到别的盘（便携模式）：用记事本打开同目录的“启动（推荐）.bat”，",
+  "   把 DATA_ROOT 改成目标目录（例如 D:\\静音AI绘画数据），之后一律用这个 bat 启动。",
+  "5. 卸载：删除本文件夹即可；数据目录需要自行删除或保留。",
+  "",
   "排查慢速/卡顿：",
   "1. 软件启动后，如果超过 5 分钟没出图、输入法打字卡、或后台没有生成记录，双击“导出诊断日志.bat”。",
   "2. 弹出的窗口会显示导出进度；桌面会生成“静音AI画板诊断日志_时间”文件夹。",
@@ -448,5 +474,104 @@ await writeFile(path.join(releaseDir, "使用说明.txt"), `\uFEFF${[
   "安全提示：渠道商 API、真实上游 KEY、模型映射、价格口径和失败兜底统一由静音中转站控制；APP 不内置上传图、历史图或生成记录。"
 ].join("\r\n")}`, "utf8");
 
+// ---------------------------------------------------------------------------
+// 2026-09-29（v3.7）：发布包结构规范化。
+// 以前发布目录只有一个 exe + 说明 + 诊断脚本，用户既不知道数据在哪、也无法校验文件。
+// 这里补齐：version.json（版本/构建时间/校验和/数据目录）、更新日志.md、
+// 启动（推荐）.bat（可用 DATA_ROOT 指定数据目录 → 便携模式）、tools\校验和.txt。
+const buildTime = new Date().toISOString();
+const internalVersion = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8")).version;
+
+await writeFile(path.join(releaseDir, "version.json"), `\uFEFF${JSON.stringify({
+  productName,
+  releaseName,
+  appVersion: productVersion,
+  internalVersion,
+  releaseId,
+  buildTime,
+  executable: exeName,
+  sha256: hash,
+  sizeBytes: exeInfo.size,
+  sizeMB: Number((exeInfo.size / 1024 / 1024).toFixed(2)),
+  defaultDataDir: "%LOCALAPPDATA%\\静音AI绘画数据",
+  dataDirOverrideEnv: "JINGYIN_RELEASE_ROOT",
+  notes: "改动见 更新日志.md"
+}, null, 2)}\n`, "utf8");
+
+await writeFile(path.join(releaseDir, "更新日志.md"), `\uFEFF${[
+  "# 静音AI画板 更新日志",
+  "",
+  "## v3.7（2026-09-29）",
+  "",
+  "### 修复",
+  "- 「清空全部」后历史会在下次启动被扫描重建：现在只要 history.json 存在就完全以它为准",
+  "  （空数组同样尊重），只有文件缺失/损坏时才走备份恢复或扫描 history-images 重建。",
+  "  此前封装版 357 条历史全部是 recovered（无提示词），就是被旧兜底逻辑复活的。",
+  "",
+  "### 新增",
+  "- 设置 →「数据与存储」：显示数据目录路径、历史图片/参考图/结果缓存/日志的个数与占用、历史条数；",
+  "  支持一键“打开目录”，并可按类别清理（历史图片会同时把历史清单置空并覆盖备份）。",
+  "- 清理是真删磁盘文件，删完立即刷新用量，无法撤销（有二次确认）。",
+  "",
+  "### 变更",
+  "- TT Image 2.5 的 Subdirect 线路（silent-tt25-line-07）改走 JSON + image_urls 提交；",
+  "  中转计费表达式只能解析 JSON 请求体，这样线路档位（0.11）才会生效。其它线路/模型不受影响。",
+  "- 历史图片的读取不再无条件扫描目录重建，清空之后才会真的空。",
+  "",
+  "### 打包",
+  "- 发布目录不再只有一个 exe，新增：",
+  "  · version.json —— 版本号、内部版本、构建时间、exe SHA256/大小、默认数据目录、数据目录覆盖变量；",
+  "  · 更新日志.md —— 本文件；",
+  "  · 启动（推荐）.bat —— 可用 DATA_ROOT 指定数据目录（便携模式），留空则用默认数据目录；",
+  "  · tools\\\\校验和.txt —— exe 的 SHA256 与大小，便于分发核对。",
+  "- 使用说明补充：数据目录位置、如何彻底清理、如何自定义数据目录、如何卸载。",
+  "",
+  "## v3.6（2026-09-27）",
+  "",
+  "- 首个对外发布的内测封装版本（Node SEA 单文件 exe + 诊断日志导出）。"
+].join("\r\n")}\n`, "utf8");
+
+const launcherBatch = `@echo off
+setlocal
+title Jingyin AI Board Launcher
+
+rem ==========================================================================
+rem  静音AI画板 启动器（推荐）
+rem
+rem  便携模式：把 DATA_ROOT 改成你想要的数据目录（例如 D:\\静音AI绘画数据），
+rem  之后一律用这个 bat 启动，历史图片/参考图/日志就会写到那里。
+rem  留空（DATA_ROOT=）则使用默认目录 %LOCALAPPDATA%\\静音AI绘画数据
+rem ==========================================================================
+
+set "DATA_ROOT="
+
+if not "%DATA_ROOT%"=="" (
+  set "JINGYIN_RELEASE_ROOT=%DATA_ROOT%"
+  echo Data directory: %JINGYIN_RELEASE_ROOT%
+) else (
+  echo Data directory: %%LOCALAPPDATA%%\\静音AI绘画数据
+)
+
+start "" "%~dp0${exeName}"
+exit /b 0
+`;
+await writeFile(path.join(releaseDir, "启动（推荐）.bat"), launcherBatch, "utf8");
+
+await mkdir(path.join(releaseDir, "tools"), { recursive: true });
+await writeFile(path.join(releaseDir, "tools", "校验和.txt"), `\uFEFF${[
+  `${productName} ${releaseName}`,
+  `构建时间：${buildTime}`,
+  `文件：${exeName}`,
+  `大小：${(exeInfo.size / 1024 / 1024).toFixed(2)} MB (${exeInfo.size} 字节)`,
+  `SHA256：${hash}`,
+  "",
+  "校验命令（PowerShell）：",
+  `  Get-FileHash -Algorithm SHA256 ".\\${exeName}"`,
+  "",
+  "发行说明：本安装包不含任何 KEY、上传图、历史图片或图片缓存；",
+  "这些只会在运行时写入数据目录（默认 %LOCALAPPDATA%\\静音AI绘画数据）。"
+].join("\r\n")}\n`, "utf8");
+
 console.log(`Release ready: ${releaseExe}`);
 console.log(`SHA256: ${hash}`);
+console.log(`Release files: ${exeName}, version.json, 更新日志.md, 启动（推荐）.bat, 使用说明.txt, 导出诊断日志.bat/.cmd, export-diagnostics.ps1, tools/校验和.txt`);

@@ -50,6 +50,10 @@ const ORDER = [
   "outfit-defer-autosave-check",
   "pro-wire-check",
   "error-boundary-check",
+  // 2026-09-29：TT Image 2.5 的 Subdirect 线路改走 JSON + image_urls
+  // （中转计费表达式只解析 JSON 请求体，multipart 读不到 channelId 会落默认档）。
+  // 该脚本是这条链路的请求形状断言，之前漏登记在顺序表里，run-all-check 会点名。
+  "tt25-subdirect-wire-check",
   "routing-check",
   "ui-duplication-check",
   "modal-shell-check",
